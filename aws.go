@@ -16,7 +16,9 @@ type AWSExporter struct {
 }
 
 func NewAWSExporter() *AWSExporter {
-	return &AWSExporter{}
+	return &AWSExporter{
+		logAll: true,
+	}
 }
 
 func (e *AWSExporter) Middleware() func(http.Handler) http.Handler {
