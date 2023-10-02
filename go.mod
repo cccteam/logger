@@ -3,7 +3,7 @@ module github.com/jtwatson/logger
 go 1.21
 
 require (
-	cloud.google.com/go/logging v1.7.0
+	cloud.google.com/go/logging v1.8.1
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.14
 	github.com/go-playground/errors/v5 v5.3.0
 	github.com/go-test/deep v1.1.0
