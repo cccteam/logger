@@ -41,7 +41,8 @@ type awsHandler struct {
 
 func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sc := trace.SpanContextFromContext(r.Context())
-	l := newAWSLogger(h.childLogger, sc.TraceID().String())
+	xrayTraceID := sc.TraceID().String() // set xray trace id
+	l := newAWSLogger(h.childLogger, xrayTraceID)
 	r = r.WithContext(newContext(r.Context(), l))
 	sw := &statusWriter{ResponseWriter: w}
 
@@ -61,7 +62,7 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logAttr := []slog.Attr{
-		slog.Any("trace", sc.TraceID().String()),
+		slog.Any("traceID", xrayTraceID),
 		slog.Any("spanID", sc.SpanID().String()),
 	}
 	logAttr = append(logAttr, httpRequestAttributes(r)...)
