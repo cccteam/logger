@@ -5,7 +5,7 @@ go 1.21
 require (
 	cloud.google.com/go/logging v1.7.0
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.14
-	github.com/go-playground/errors/v5 v5.3.0
+	github.com/go-playground/errors/v5 v5.3.3
 	github.com/go-test/deep v1.1.0
 	go.opentelemetry.io/otel v1.16.0
 	go.opentelemetry.io/otel/sdk v1.16.0
