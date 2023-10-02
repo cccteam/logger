@@ -40,8 +40,8 @@ type awsHandler struct {
 }
 
 func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	traceID := r.Header.Get("X-Amzn-Trace-Id")
-	l := newAWSLogger(h.childLogger, traceID)
+	sc := trace.SpanContextFromContext(r.Context())
+	l := newAWSLogger(h.childLogger, sc.TraceID().String())
 	r = r.WithContext(newContext(r.Context(), l))
 	sw := &statusWriter{ResponseWriter: w}
 
@@ -60,7 +60,6 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		maxLevel = slog.LevelError
 	}
 
-	sc := trace.SpanContextFromContext(r.Context())
 	logAttr := []slog.Attr{
 		slog.Any("trace", sc.TraceID().String()),
 		slog.Any("spanID", sc.SpanID().String()),
@@ -133,8 +132,11 @@ func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
 	l.mu.Unlock()
 
 	span := trace.SpanFromContext(ctx)
-
-	l.logger.Log(ctx, level, message, slog.Any("spanID", span.SpanContext().SpanID().String()))
+	attr := []slog.Attr{
+		slog.String("traceID", l.traceID),
+		slog.String("spanID", span.SpanContext().SpanID().String()),
+	}
+	l.logger.LogAttrs(ctx, level, message, attr...)
 }
 
 func httpRequestAttributes(r *http.Request) []slog.Attr {
