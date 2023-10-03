@@ -12,6 +12,7 @@ linters-settings:
           - contrib.go.opencensus.io/exporter/stackdriver/propagation
           - github.com/go-playground/errors
           - github.com/go-test/deep
+          - github.com/google/go-cmp
   funlen:
     lines: 100
     statements: 50
@@ -208,11 +209,6 @@ issues:
 
   # Maximum count of issues with the same text. Set to 0 to disable. Default is 3.
   max-same-issues: 0
-
-# golangci.com configuration
-# https://github.com/golangci/golangci/wiki/Configuration
-service:
-  golangci-lint-version: 1.43 # use the fixed version to not introduce new linters unexpectedly
 
 run:
   skip-dirs:
