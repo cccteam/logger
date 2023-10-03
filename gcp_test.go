@@ -291,7 +291,7 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			if l.e.Trace != traceID {
 				t.Errorf("Trace = %v, want %v", l.e.Trace, traceID)
 			}
-			if pl, ok := l.e.Payload.(map[string]interface{}); ok {
+			if pl, ok := l.e.Payload.(map[string]any); ok {
 				if m, ok := pl["message"].(string); ok {
 					if m != "Parent Log Entry" {
 						t.Errorf("Message = %v, want %v", m, "Parent Log Entry")
@@ -300,7 +300,7 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 					t.Fatalf("Message = %T, want %T", pl["message"], "")
 				}
 			} else {
-				t.Fatalf("Payload = %T, want %T", l.e.Payload, map[string]interface{}{})
+				t.Fatalf("Payload = %T, want %T", l.e.Payload, map[string]any{})
 			}
 			if l.e.HTTPRequest.Status != tt.args.status {
 				t.Errorf("Status = %v, want %v", l.e.HTTPRequest.Status, tt.args.status)
@@ -419,8 +419,8 @@ func Test_gcpLogger(t *testing.T) {
 
 	type args struct {
 		format string
-		v      []interface{}
-		v2     interface{}
+		v      []any
+		v2     any
 	}
 	tests := []struct {
 		name       string
@@ -438,7 +438,7 @@ func Test_gcpLogger(t *testing.T) {
 			name: "Strings",
 			args: args{
 				format: "Formatted %s",
-				v:      []interface{}{"Message"},
+				v:      []any{"Message"},
 				v2:     "Message",
 			},
 			wantDebug:  "Message",
@@ -454,7 +454,7 @@ func Test_gcpLogger(t *testing.T) {
 			name: "String & Error",
 			args: args{
 				format: "Formatted %s",
-				v:      []interface{}{"Message"},
+				v:      []any{"Message"},
 				v2:     errors.New("Message"),
 			},
 			wantDebug:  "Message",
@@ -549,7 +549,7 @@ type testLogger struct {
 }
 
 func (t *testLogger) Log(e logging.Entry) {
-	_, _ = t.buf.WriteString(e.Payload.(map[string]interface{})["message"].(string))
+	_, _ = t.buf.WriteString(e.Payload.(map[string]any)["message"].(string))
 }
 
 type captureLogger struct {

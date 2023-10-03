@@ -12,8 +12,8 @@ func TestLogger(t *testing.T) {
 	t.Parallel()
 
 	type args struct {
-		v  []interface{}
-		v2 interface{}
+		v  []any
+		v2 any
 	}
 	tests := []struct {
 		name       string
@@ -30,7 +30,7 @@ func TestLogger(t *testing.T) {
 		{
 			name: "Strings",
 			args: args{
-				v:  []interface{}{"Message"},
+				v:  []any{"Message"},
 				v2: "Message",
 			},
 			wantDebug:  "Message",
@@ -45,7 +45,7 @@ func TestLogger(t *testing.T) {
 		{
 			name: "String & Error",
 			args: args{
-				v:  []interface{}{"Message"},
+				v:  []any{"Message"},
 				v2: errors.New("Message"),
 			},
 			wantDebug:  "Message",

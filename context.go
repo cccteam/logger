@@ -42,19 +42,19 @@ func newContext(ctx context.Context, l ctxLogger) context.Context {
 // ctxLogger defines the logging interface with context
 type ctxLogger interface {
 	// Debug logs a debug message.
-	Debug(ctx context.Context, v interface{})
+	Debug(ctx context.Context, v any)
 	// Debugf logs a debug message with format.
-	Debugf(ctx context.Context, format string, v ...interface{})
+	Debugf(ctx context.Context, format string, v ...any)
 	// Info logs a info message.
-	Info(ctx context.Context, v interface{})
+	Info(ctx context.Context, v any)
 	// Infof logs a info message with format.
-	Infof(ctx context.Context, format string, v ...interface{})
+	Infof(ctx context.Context, format string, v ...any)
 	// Warn logs a warning message.
-	Warn(ctx context.Context, v interface{})
+	Warn(ctx context.Context, v any)
 	// Warnf logs a warning message with format.
-	Warnf(ctx context.Context, format string, v ...interface{})
+	Warnf(ctx context.Context, format string, v ...any)
 	// Error logs an error message.
-	Error(ctx context.Context, v interface{})
+	Error(ctx context.Context, v any)
 	// Errorf logs an error message with format.
-	Errorf(ctx context.Context, format string, v ...interface{})
+	Errorf(ctx context.Context, format string, v ...any)
 }

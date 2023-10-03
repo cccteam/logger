@@ -99,42 +99,42 @@ type awslog interface {
 }
 
 // Debug logs a debug message.
-func (l *awsLogger) Debug(ctx context.Context, v interface{}) {
+func (l *awsLogger) Debug(ctx context.Context, v any) {
 	l.log(ctx, slog.LevelDebug, fmt.Sprint(v))
 }
 
 // Debugf logs a debug message with format.
-func (l *awsLogger) Debugf(ctx context.Context, format string, v ...interface{}) {
+func (l *awsLogger) Debugf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, slog.LevelDebug, fmt.Sprintf(format, v...))
 }
 
 // Info logs a info message.
-func (l *awsLogger) Info(ctx context.Context, v interface{}) {
+func (l *awsLogger) Info(ctx context.Context, v any) {
 	l.log(ctx, slog.LevelInfo, fmt.Sprint(v))
 }
 
 // Infof logs a info message with format.
-func (l *awsLogger) Infof(ctx context.Context, format string, v ...interface{}) {
+func (l *awsLogger) Infof(ctx context.Context, format string, v ...any) {
 	l.log(ctx, slog.LevelInfo, fmt.Sprintf(format, v...))
 }
 
 // Warn logs a warning message.
-func (l *awsLogger) Warn(ctx context.Context, v interface{}) {
+func (l *awsLogger) Warn(ctx context.Context, v any) {
 	l.log(ctx, slog.LevelWarn, fmt.Sprint(v))
 }
 
 // Warnf logs a warning message with format.
-func (l *awsLogger) Warnf(ctx context.Context, format string, v ...interface{}) {
+func (l *awsLogger) Warnf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, slog.LevelWarn, fmt.Sprintf(format, v...))
 }
 
 // Error logs an error message.
-func (l *awsLogger) Error(ctx context.Context, v interface{}) {
+func (l *awsLogger) Error(ctx context.Context, v any) {
 	l.log(ctx, slog.LevelError, fmt.Sprint(v))
 }
 
 // Errorf logs an error message with format.
-func (l *awsLogger) Errorf(ctx context.Context, format string, v ...interface{}) {
+func (l *awsLogger) Errorf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, slog.LevelError, fmt.Sprintf(format, v...))
 }
 

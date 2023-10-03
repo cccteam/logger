@@ -274,8 +274,8 @@ func Test_awsLogger(t *testing.T) {
 
 	type args struct {
 		format string
-		v      []interface{}
-		v2     interface{}
+		v      []any
+		v2     any
 	}
 	tests := []struct {
 		name       string
@@ -293,7 +293,7 @@ func Test_awsLogger(t *testing.T) {
 			name: "Strings",
 			args: args{
 				format: "Formatted %s",
-				v:      []interface{}{"Message"},
+				v:      []any{"Message"},
 				v2:     "Message",
 			},
 			wantDebug:  "Message",
@@ -309,7 +309,7 @@ func Test_awsLogger(t *testing.T) {
 			name: "String & Error",
 			args: args{
 				format: "Formatted %s",
-				v:      []interface{}{"Message"},
+				v:      []any{"Message"},
 				v2:     errors.New("Message"),
 			},
 			wantDebug:  "Message",

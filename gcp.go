@@ -91,7 +91,7 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Trace:        traceID,
 		SpanID:       sc.SpanID().String(),
 		TraceSampled: sc.IsSampled(),
-		Payload: map[string]interface{}{
+		Payload: map[string]any{
 			"message": "Parent Log Entry",
 		},
 		HTTPRequest: &logging.HTTPRequest{
@@ -144,46 +144,46 @@ func newGCPLogger(lg logger, traceID string) *gcpLogger {
 }
 
 // Debug logs a debug message.
-func (l *gcpLogger) Debug(ctx context.Context, v interface{}) {
+func (l *gcpLogger) Debug(ctx context.Context, v any) {
 	l.log(ctx, logging.Debug, v)
 }
 
 // Debugf logs a debug message with format.
-func (l *gcpLogger) Debugf(ctx context.Context, format string, v ...interface{}) {
+func (l *gcpLogger) Debugf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, logging.Debug, fmt.Sprintf(format, v...))
 }
 
 // Info logs a info message.
-func (l *gcpLogger) Info(ctx context.Context, v interface{}) {
+func (l *gcpLogger) Info(ctx context.Context, v any) {
 	l.log(ctx, logging.Info, v)
 }
 
 // Infof logs a info message with format.
-func (l *gcpLogger) Infof(ctx context.Context, format string, v ...interface{}) {
+func (l *gcpLogger) Infof(ctx context.Context, format string, v ...any) {
 	l.log(ctx, logging.Info, fmt.Sprintf(format, v...))
 }
 
 // Warn logs a warning message.
-func (l *gcpLogger) Warn(ctx context.Context, v interface{}) {
+func (l *gcpLogger) Warn(ctx context.Context, v any) {
 	l.log(ctx, logging.Warning, v)
 }
 
 // Warnf logs a warning message with format.
-func (l *gcpLogger) Warnf(ctx context.Context, format string, v ...interface{}) {
+func (l *gcpLogger) Warnf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, logging.Warning, fmt.Sprintf(format, v...))
 }
 
 // Error logs an error message.
-func (l *gcpLogger) Error(ctx context.Context, v interface{}) {
+func (l *gcpLogger) Error(ctx context.Context, v any) {
 	l.log(ctx, logging.Error, v)
 }
 
 // Errorf logs an error message with format.
-func (l *gcpLogger) Errorf(ctx context.Context, format string, v ...interface{}) {
+func (l *gcpLogger) Errorf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, logging.Error, fmt.Sprintf(format, v...))
 }
 
-func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, p interface{}) {
+func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, p any) {
 	l.mu.Lock()
 	if l.maxSeverity < severity {
 		l.maxSeverity = severity
@@ -199,7 +199,7 @@ func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, p interf
 
 	l.lg.Log(
 		logging.Entry{
-			Payload: map[string]interface{}{
+			Payload: map[string]any{
 				"message": p,
 			},
 			Severity:     severity,

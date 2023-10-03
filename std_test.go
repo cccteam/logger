@@ -14,8 +14,8 @@ func Test_stdErrLogger(t *testing.T) {
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 
 	type args struct {
-		v  []interface{}
-		v2 interface{}
+		v  []any
+		v2 any
 	}
 	tests := []struct {
 		name       string
@@ -32,7 +32,7 @@ func Test_stdErrLogger(t *testing.T) {
 		{
 			name: "Test 1",
 			args: args{
-				v:  []interface{}{"Message"},
+				v:  []any{"Message"},
 				v2: "Message",
 			},
 			wantDebug:  "DEBUG: Message\n",
