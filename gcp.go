@@ -9,7 +9,6 @@ import (
 
 	"cloud.google.com/go/logging"
 	"contrib.go.opencensus.io/exporter/stackdriver/propagation"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -62,7 +61,7 @@ type gcpHandler struct {
 
 func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	begin := time.Now()
-	traceID := gcpTraceIDFromRequest(r, g.projectID)
+	traceID := gcpTraceIDFromRequest(r, g.projectID, generateID)
 	l := newGCPLogger(g.childLogger, traceID)
 	r = r.WithContext(newContext(r.Context(), l))
 	sw := &statusWriter{ResponseWriter: w}
@@ -106,17 +105,15 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // gcpTraceIDFromRequest formats a trace_id value for GCP Stackdriver
-func gcpTraceIDFromRequest(r *http.Request, projectID string) string {
+func gcpTraceIDFromRequest(r *http.Request, projectID string, idgen func() string) string {
 	var traceID string
-	if sc, ok := new(propagation.HTTPFormat).SpanContextFromRequest(r); ok {
-		traceID = sc.TraceID.String()
+	if sc := trace.SpanFromContext(r.Context()).SpanContext(); sc.IsValid() {
+		traceID = sc.TraceID().String()
 	} else {
-		sc := trace.SpanFromContext(r.Context()).SpanContext()
-		if sc.IsValid() {
-			traceID = sc.TraceID().String()
+		if sc1, ok := new(propagation.HTTPFormat).SpanContextFromRequest(r); ok {
+			traceID = sc1.TraceID.String()
 		} else {
-			_, span := otel.Tracer("").Start(r.Context(), r.URL.String())
-			traceID = span.SpanContext().TraceID().String()
+			traceID = idgen()
 		}
 	}
 

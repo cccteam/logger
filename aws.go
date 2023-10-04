@@ -49,8 +49,7 @@ type awsHandler struct {
 // This performs pre and post request logic for logging
 func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	begin := time.Now()
-	sc := trace.SpanContextFromContext(r.Context())
-	xrayTraceID := sc.TraceID().String()
+	xrayTraceID := awsTraceIDFromRequest(r, generateID)
 	l := newAWSLogger(h.childLogger, xrayTraceID)
 	r = r.WithContext(newContext(r.Context(), l))
 	sw := &statusWriter{ResponseWriter: w}
@@ -69,6 +68,8 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if sw.Status() > 399 && maxLevel < slog.LevelError {
 		maxLevel = slog.LevelError
 	}
+
+	sc := trace.SpanFromContext(r.Context()).SpanContext()
 
 	logAttr := []slog.Attr{
 		slog.Any("trace_id", xrayTraceID),
@@ -166,4 +167,17 @@ func httpAttributes(r *http.Request, sw *statusWriter) []slog.Attr {
 		slog.String("http.scheme", r.URL.Scheme),
 		slog.String("http.proto", r.Proto),
 	}
+}
+
+// awsTraceIDFromRequest retrieves the trace id from the request if possible
+func awsTraceIDFromRequest(r *http.Request, idgen func() string) string {
+	var traceID string
+	sc := trace.SpanFromContext(r.Context()).SpanContext()
+	if sc.IsValid() {
+		traceID = sc.TraceID().String()
+	} else {
+		traceID = idgen()
+	}
+
+	return traceID
 }

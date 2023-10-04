@@ -310,9 +310,11 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 }
 
 func Test_gcpTraceIDFromRequest(t *testing.T) {
+	t.Parallel()
 	type args struct {
 		mockReq   func(traceStr string) (*http.Request, string)
 		projectID string
+		traceStr  string
 	}
 	tests := []struct {
 		name            string
@@ -329,9 +331,10 @@ func Test_gcpTraceIDFromRequest(t *testing.T) {
 					return &http.Request{URL: &url.URL{}}, wantTraceStr
 				},
 				projectID: "my-project",
+				traceStr:  "105445aa7843bc8bf206b12000100000",
 			},
 			wantTracePrefix: "projects/my-project/traces/",
-			wantTraceStr:    "00000000000000000000000000000000",
+			wantTraceStr:    "105445aa7843bc8bf206b12000100000",
 		},
 		{
 			// This test sets the global tracing provider (I don't think this can be un-done)
@@ -370,10 +373,12 @@ func Test_gcpTraceIDFromRequest(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			r, traceStr := tt.args.mockReq(tt.wantTraceStr)
 			want := tt.wantTracePrefix + traceStr
-			if got := gcpTraceIDFromRequest(r, tt.args.projectID); got != want {
-				t.Errorf("traceIDFromRequest() = %v, want %v", got, want)
+
+			if got := gcpTraceIDFromRequest(r, tt.args.projectID, func() string { return tt.args.traceStr }); got != want {
+				t.Errorf("gcpTraceIDFromRequest() = %v, want %v", got, want)
 			}
 		})
 	}

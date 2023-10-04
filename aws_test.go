@@ -7,11 +7,14 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 func TestNewAWSExporter(t *testing.T) {
@@ -227,6 +230,60 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 				if pl != "Parent Log Entry" {
 					t.Errorf("Message = %v, want %v", pl, "Parent Log Entry")
 				}
+			}
+		})
+	}
+}
+
+func Test_awsTraceIDFromRequest(t *testing.T) {
+	t.Parallel()
+	type args struct {
+		mockReq  func(traceStr string) (*http.Request, string)
+		traceStr string
+	}
+	tests := []struct {
+		name         string
+		args         args
+		wantTraceStr string
+		wantBlankStr bool
+	}{
+		// The order these are significant
+		{
+			// This test relies on the global tracing provider NOT being set
+			name: "no trace in request",
+			args: args{
+				mockReq: func(wantTraceStr string) (*http.Request, string) {
+					return &http.Request{URL: &url.URL{}}, wantTraceStr
+				},
+				traceStr: "105445aa7843bc8bf206b12000100000",
+			},
+			wantTraceStr: "105445aa7843bc8bf206b12000100000",
+			wantBlankStr: false,
+		},
+		{
+			// This test sets the global tracing provider (I don't think this can be un-done)
+			name: "with trace in request",
+			args: args{
+				mockReq: func(_ string) (r *http.Request, traceStr string) {
+					otel.SetTracerProvider(sdktrace.NewTracerProvider())
+					ctx, span := otel.Tracer("test/examples").Start(context.Background(), "test trace")
+
+					r = httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+					r = r.WithContext(ctx)
+
+					return r, span.SpanContext().TraceID().String()
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r, want := tt.args.mockReq(tt.wantTraceStr)
+
+			if got := awsTraceIDFromRequest(r, func() string { return tt.args.traceStr }); got != want && (got == "0000000000000000") != tt.wantBlankStr {
+				t.Errorf("awsTraceIDFromRequest() = %v, want %v", got, want)
 			}
 		})
 	}
