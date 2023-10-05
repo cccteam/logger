@@ -4,90 +4,44 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"reflect"
 	"testing"
 
-	"cloud.google.com/go/logging"
-	"github.com/go-test/deep"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
-func TestNewGoogleCloudExporter(t *testing.T) {
+func TestNewAWSExporter(t *testing.T) {
 	t.Parallel()
-
 	type args struct {
-		client    *logging.Client
-		projectID string
-		opts      []logging.LoggerOption
+		logAll bool
 	}
 	tests := []struct {
 		name string
 		args args
-		want *GoogleCloudExporter
+		want *AWSExporter
 	}{
 		{
-			name: "Simple Constructor",
+			name: "TestNewAWSExporter with logall true",
 			args: args{
-				client:    &logging.Client{},
-				projectID: "My Project ID",
-				opts:      []logging.LoggerOption{logging.ConcurrentWriteLimit(5)},
+				logAll: true,
 			},
-			want: &GoogleCloudExporter{
-				projectID: "My Project ID",
-				client:    &logging.Client{},
-				opts:      []logging.LoggerOption{logging.ConcurrentWriteLimit(5)},
-				logAll:    true,
-			},
-		},
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if got := NewGoogleCloudExporter(tt.args.client, tt.args.projectID, tt.args.opts...); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewGoogleCloudExporter() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGoogleCloudExporter_LogAll(t *testing.T) {
-	t.Parallel()
-	type fields struct {
-		logAll bool
-	}
-	type args struct {
-		v bool
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   *GoogleCloudExporter
-	}{
-		{
-			name: "logAll=true",
-			args: args{
-				v: true,
-			},
-			want: &GoogleCloudExporter{
+			want: &AWSExporter{
 				logAll: true,
 			},
 		},
 		{
-			name: "logAll=false",
-			fields: fields{
-				logAll: true,
-			},
+			name: "TestNewAWSExporter with logall false",
 			args: args{
-				v: false,
+				logAll: false,
 			},
-			want: &GoogleCloudExporter{
+			want: &AWSExporter{
 				logAll: false,
 			},
 		},
@@ -96,24 +50,20 @@ func TestGoogleCloudExporter_LogAll(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			e := &GoogleCloudExporter{
-				logAll: tt.fields.logAll,
-			}
-			if got := e.LogAll(tt.args.v); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GoogleCloudExporter.LogAll() = %v, want %v", got, tt.want)
+			got := NewAWSExporter(tt.args.logAll)
+
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(AWSExporter{})); diff != "" {
+				t.Errorf("NewAWSExporter() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
 }
 
-func TestGoogleCloudExporter_Middleware(t *testing.T) {
-	disableMetaServertest(t)
+func TestAWSExporter_Middleware(t *testing.T) {
+	t.Parallel()
 
 	type fields struct {
-		projectID string
-		client    *logging.Client
-		opts      []logging.LoggerOption
-		logAll    bool
+		logAll bool
 	}
 	tests := []struct {
 		name   string
@@ -121,23 +71,15 @@ func TestGoogleCloudExporter_Middleware(t *testing.T) {
 		want   func(http.Handler) http.Handler
 	}{
 		{
-			name: "call Middleware",
+			name: "TestAWSExporter_Middleware",
 			fields: fields{
-				projectID: "My other project",
-				client:    &logging.Client{},
-				opts:      []logging.LoggerOption{logging.ConcurrentWriteLimit(5)},
-				logAll:    true,
+				logAll: true,
 			},
 			want: func(next http.Handler) http.Handler {
-				client := &logging.Client{}
-				opts := []logging.LoggerOption{logging.ConcurrentWriteLimit(5)}
-
-				return &gcpHandler{
-					next:         next,
-					parentLogger: client.Logger("request_parent_log", opts...),
-					childLogger:  client.Logger("request_child_log", opts...),
-					projectID:    "My other project",
-					logAll:       true,
+				return &awsHandler{
+					next:   next,
+					logger: slog.New(slog.NewJSONHandler(os.Stdout, nil)).WithGroup("request_parent_log"),
+					logAll: true,
 				}
 			},
 		},
@@ -145,28 +87,27 @@ func TestGoogleCloudExporter_Middleware(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
-			e := &GoogleCloudExporter{
-				projectID: tt.fields.projectID,
-				client:    tt.fields.client,
-				opts:      tt.fields.opts,
-				logAll:    tt.fields.logAll,
+			t.Parallel()
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+			e := &AWSExporter{
+				logAll: tt.fields.logAll,
 			}
+
 			got := e.Middleware()(next)
-			if diff := deep.Equal(got, tt.want(next)); diff != nil {
-				t.Errorf("GoogleCloudExporter.Middleware() = %v", diff)
+			if diff := cmp.Diff(got, tt.want(next), cmpopts.IgnoreUnexported(awsHandler{})); diff != "" {
+				t.Errorf("AWSExporter.Middleware() = %s", diff)
 			}
 		})
 	}
 }
 
-func Test_gcpHandler_ServeHTTP(t *testing.T) {
+func Test_awsHandler_ServeHTTP(t *testing.T) {
 	t.Parallel()
 
 	type args struct {
 		status int
 		logs   int
-		level  logging.Severity
+		level  slog.Level
 	}
 	type fields struct {
 		projectID string
@@ -176,7 +117,7 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 		name      string
 		fields    fields
 		args      args
-		wantLevel logging.Severity
+		wantLevel slog.Level
 	}{
 		{
 			name: "logAll=true",
@@ -187,9 +128,9 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			args: args{
 				status: http.StatusOK,
 				logs:   1,
-				level:  logging.Info,
+				level:  slog.LevelInfo,
 			},
-			wantLevel: logging.Info,
+			wantLevel: slog.LevelInfo,
 		},
 		{
 			name: "logAll=true no logging",
@@ -200,7 +141,7 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			args: args{
 				status: http.StatusOK,
 			},
-			wantLevel: logging.Default,
+			wantLevel: slog.LevelInfo,
 		},
 		{
 			name: "logAll=false no logging",
@@ -219,9 +160,9 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			args: args{
 				status: http.StatusOK,
 				logs:   1,
-				level:  logging.Warning,
+				level:  slog.LevelWarn,
 			},
-			wantLevel: logging.Warning,
+			wantLevel: slog.LevelWarn,
 		},
 		{
 			name: "logAll=true no logging",
@@ -232,7 +173,7 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			args: args{
 				status: http.StatusInternalServerError,
 			},
-			wantLevel: logging.Error,
+			wantLevel: slog.LevelError,
 		},
 	}
 	for _, tt := range tests {
@@ -241,32 +182,22 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			t.Parallel()
 
 			var handlerCalled bool
-			var traceID string
-			l := &captureLogger{}
-			handler := &gcpHandler{
-				parentLogger: l,
-				childLogger:  &captureLogger{},
-				projectID:    tt.fields.projectID,
-				logAll:       tt.fields.logAll,
+			l := &captureSLogger{}
+			handler := &awsHandler{
+				logger: l,
+				logAll: tt.fields.logAll,
 				next: http.HandlerFunc(
 					func(w http.ResponseWriter, r *http.Request) {
 						for i := 0; i < tt.args.logs; i++ {
 							switch tt.args.level {
-							case logging.Info:
+							case slog.LevelInfo:
 								Req(r).Info("some log")
-							case logging.Warning:
+							case slog.LevelWarn:
 								Req(r).Warn("some log")
-							case logging.Error:
+							case slog.LevelError:
 								Req(r).Error("some log")
 							default:
 							}
-						}
-
-						l := Req(r)
-						if l, ok := l.lg.(*gcpLogger); ok {
-							traceID = l.traceID
-						} else {
-							t.Fatalf("Req() = %v, wanted: %T", l, &gcpLogger{})
 						}
 
 						w.WriteHeader(tt.args.status)
@@ -285,42 +216,34 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			if tt.args.logs == 0 {
 				return
 			}
-			if l.e.Severity != tt.wantLevel {
-				t.Errorf("Severity = %v, want %v", l.e.Severity, tt.wantLevel)
+			if l.level != tt.wantLevel {
+				t.Errorf("Level = %v, want %v", l.level, tt.wantLevel)
 			}
-			if l.e.Trace != traceID {
-				t.Errorf("Trace = %v, want %v", l.e.Trace, traceID)
+
+			if l.attrs == nil {
+				t.Errorf("Attrs = %v, want %v", l.attrs, "not nil")
 			}
-			if pl, ok := l.e.Payload.(map[string]any); ok {
-				if m, ok := pl["message"].(string); ok {
-					if m != "Parent Log Entry" {
-						t.Errorf("Message = %v, want %v", m, "Parent Log Entry")
-					}
-				} else {
-					t.Fatalf("Message = %T, want %T", pl["message"], "")
+
+			if pl := l.msg; pl != "" {
+				if pl != "Parent Log Entry" {
+					t.Errorf("Message = %v, want %v", pl, "Parent Log Entry")
 				}
-			} else {
-				t.Fatalf("Payload = %T, want %T", l.e.Payload, map[string]any{})
-			}
-			if l.e.HTTPRequest.Status != tt.args.status {
-				t.Errorf("Status = %v, want %v", l.e.HTTPRequest.Status, tt.args.status)
 			}
 		})
 	}
 }
 
-func Test_gcpTraceIDFromRequest(t *testing.T) {
+func Test_awsTraceIDFromRequest(t *testing.T) {
 	t.Parallel()
 	type args struct {
-		mockReq   func(traceStr string) (*http.Request, string)
-		projectID string
-		traceStr  string
+		mockReq  func(traceStr string) (*http.Request, string)
+		traceStr string
 	}
 	tests := []struct {
-		name            string
-		args            args
-		wantTracePrefix string
-		wantTraceStr    string
+		name         string
+		args         args
+		wantTraceStr string
+		wantBlankStr bool
 	}{
 		// The order these are significant
 		{
@@ -330,11 +253,10 @@ func Test_gcpTraceIDFromRequest(t *testing.T) {
 				mockReq: func(wantTraceStr string) (*http.Request, string) {
 					return &http.Request{URL: &url.URL{}}, wantTraceStr
 				},
-				projectID: "my-project",
-				traceStr:  "105445aa7843bc8bf206b12000100000",
+				traceStr: "105445aa7843bc8bf206b12000100000",
 			},
-			wantTracePrefix: "projects/my-project/traces/",
-			wantTraceStr:    "105445aa7843bc8bf206b12000100000",
+			wantTraceStr: "105445aa7843bc8bf206b12000100000",
+			wantBlankStr: false,
 		},
 		{
 			// This test sets the global tracing provider (I don't think this can be un-done)
@@ -349,62 +271,43 @@ func Test_gcpTraceIDFromRequest(t *testing.T) {
 
 					return r, span.SpanContext().TraceID().String()
 				},
-				projectID: "my-project",
 			},
-			wantTracePrefix: "projects/my-project/traces/",
-		},
-		{
-			// With the global tracing provider set, this test shows that
-			// trace Propagation is a higher priority then trace in request context
-			name: "with propagation span in headers",
-			args: args{
-				mockReq: func(wantTraceStr string) (r *http.Request, traceStr string) {
-					r = httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-					r.Header.Add("X-Cloud-Trace-Context", wantTraceStr+"/1;o=1")
-
-					return r, wantTraceStr
-				},
-				projectID: "my-project",
-			},
-			wantTracePrefix: "projects/my-project/traces/",
-			wantTraceStr:    "105445aa7843bc8bf206b12000100000",
 		},
 	}
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			r, traceStr := tt.args.mockReq(tt.wantTraceStr)
-			want := tt.wantTracePrefix + traceStr
+			r, want := tt.args.mockReq(tt.wantTraceStr)
 
-			if got := gcpTraceIDFromRequest(r, tt.args.projectID, func() string { return tt.args.traceStr }); got != want {
-				t.Errorf("gcpTraceIDFromRequest() = %v, want %v", got, want)
+			if got := awsTraceIDFromRequest(r, func() string { return tt.args.traceStr }); got != want && (got == "0000000000000000") != tt.wantBlankStr {
+				t.Errorf("awsTraceIDFromRequest() = %v, want %v", got, want)
 			}
 		})
 	}
 }
 
-func Test_newGCPLogger(t *testing.T) {
+func Test_newAWSLogger(t *testing.T) {
 	t.Parallel()
 
 	type args struct {
-		lg      *logging.Logger
+		logger  awslog
 		traceID string
 	}
 	tests := []struct {
 		name string
 		args args
-		want ctxLogger
+		want *awsLogger
 	}{
 		{
-			name: "new",
+			name: "Test_newAWSLogger",
 			args: args{
-				lg:      &logging.Logger{},
-				traceID: "hello",
+				logger:  &testSlogger{},
+				traceID: "1234567890",
 			},
-			want: &gcpLogger{
-				lg:      &logging.Logger{},
-				traceID: "hello",
+			want: &awsLogger{
+				logger:  &testSlogger{},
+				traceID: "1234567890",
 			},
 		},
 	}
@@ -412,14 +315,16 @@ func Test_newGCPLogger(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := newGCPLogger(tt.args.lg, tt.args.traceID); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("New() = %v, want %v", got, tt.want)
+
+			got := newAWSLogger(tt.args.logger, tt.args.traceID)
+			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreFields(awsLogger{}, "logger", "mu"), cmp.AllowUnexported(awsLogger{})); diff != "" {
+				t.Errorf("newAWSLogger() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
 }
 
-func Test_gcpLogger(t *testing.T) {
+func Test_awsLogger(t *testing.T) {
 	t.Parallel()
 
 	type args struct {
@@ -480,8 +385,8 @@ func Test_gcpLogger(t *testing.T) {
 			ctx := context.Background()
 			var buf bytes.Buffer
 
-			l := &gcpLogger{
-				lg: &testLogger{
+			l := &awsLogger{
+				logger: &testSlogger{
 					buf: &buf,
 				},
 			}
@@ -537,30 +442,24 @@ func Test_gcpLogger(t *testing.T) {
 	}
 }
 
-func disableMetaServertest(t *testing.T) {
-	t.Helper()
-
-	// Fix issue when logging.Client attempts to detect its
-	// env by querying GCE_METADATA_HOST and nothing is there
-	// so your test is very slow. This tries to causes the
-	// detection to fail faster and not hang your test so long
-	curEnv := os.Getenv("GCE_METADATA_HOST")
-	t.Cleanup(func() { os.Setenv("GCE_METADATA_HOST", curEnv) })
-	_ = os.Setenv("GCE_METADATA_HOST", "localhost")
-}
-
-type testLogger struct {
+type testSlogger struct {
 	buf *bytes.Buffer
 }
 
-func (t *testLogger) Log(e logging.Entry) {
-	_, _ = t.buf.WriteString(e.Payload.(map[string]any)["message"].(string))
+func (t *testSlogger) LogAttrs(_ context.Context, _ slog.Level, msg string, _ ...slog.Attr) {
+	_, _ = t.buf.WriteString(msg)
 }
 
-type captureLogger struct {
-	e logging.Entry
+type captureSLogger struct {
+	ctx   context.Context
+	level slog.Level
+	msg   string
+	attrs []slog.Attr
 }
 
-func (c *captureLogger) Log(e logging.Entry) {
-	c.e = e
+func (c *captureSLogger) LogAttrs(ctx context.Context, level slog.Level, msg string, attrs ...slog.Attr) {
+	c.ctx = ctx
+	c.level = level
+	c.msg = msg
+	c.attrs = attrs
 }

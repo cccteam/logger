@@ -1,6 +1,8 @@
 package logger
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"net/http"
 	"strconv"
 
@@ -61,4 +63,13 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 	}
 
 	return n, nil
+}
+
+// generateID provides an id that matches the trace id format
+func generateID() string {
+	t := [16]byte{}
+
+	_, _ = rand.Read(t[:])
+
+	return hex.EncodeToString(t[:])
 }

@@ -242,6 +242,29 @@ func Test_statusWriter_Write(t *testing.T) {
 	}
 }
 
+func Test_generateID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		wantLen int
+	}{
+		{
+			name:    "Length 16",
+			wantLen: 16,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := generateID(); len(got)/2 != tt.wantLen {
+				t.Errorf("generateID() = %v, want len=%v", got, tt.wantLen)
+			}
+		})
+	}
+}
+
 type responseRecorder struct {
 	http.ResponseWriter
 	err error

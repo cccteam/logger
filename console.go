@@ -63,50 +63,50 @@ func newConsoleLogger(r *http.Request, noColor bool) *consoleLogger {
 }
 
 // Debug logs a debug message.
-func (l *consoleLogger) Debug(_ context.Context, v interface{}) {
+func (l *consoleLogger) Debug(_ context.Context, v any) {
 	l.console("DEBUG", gray, v)
 }
 
 // Debugf logs a debug message with format.
-func (l *consoleLogger) Debugf(_ context.Context, format string, v ...interface{}) {
+func (l *consoleLogger) Debugf(_ context.Context, format string, v ...any) {
 	l.consolef("DEBUG", gray, format, v...)
 }
 
 // Info logs a info message.
-func (l *consoleLogger) Info(_ context.Context, v interface{}) {
+func (l *consoleLogger) Info(_ context.Context, v any) {
 	l.console("INFO ", blue, v)
 }
 
 // Infof logs a info message with format.
-func (l *consoleLogger) Infof(_ context.Context, format string, v ...interface{}) {
+func (l *consoleLogger) Infof(_ context.Context, format string, v ...any) {
 	l.consolef("INFO ", blue, format, v...)
 }
 
 // Warn logs a warning message.
-func (l *consoleLogger) Warn(_ context.Context, v interface{}) {
+func (l *consoleLogger) Warn(_ context.Context, v any) {
 	l.console("WARN ", yellow, v)
 }
 
 // Warnf logs a warning message with format.
-func (l *consoleLogger) Warnf(_ context.Context, format string, v ...interface{}) {
+func (l *consoleLogger) Warnf(_ context.Context, format string, v ...any) {
 	l.consolef("WARN ", yellow, format, v...)
 }
 
 // Error logs an error message.
-func (l *consoleLogger) Error(_ context.Context, v interface{}) {
+func (l *consoleLogger) Error(_ context.Context, v any) {
 	l.console("ERROR", red, v)
 }
 
 // Errorf logs an error message with format.
-func (l *consoleLogger) Errorf(_ context.Context, format string, v ...interface{}) {
+func (l *consoleLogger) Errorf(_ context.Context, format string, v ...any) {
 	l.consolef("ERROR", red, format, v...)
 }
 
-func (l *consoleLogger) console(level string, c color, v interface{}) {
+func (l *consoleLogger) console(level string, c color, v any) {
 	log.Printf(l.colorPrint(level, c)+": %s %s", l.r.URL.Path, v)
 }
 
-func (l *consoleLogger) consolef(level string, c color, format string, v ...interface{}) {
+func (l *consoleLogger) consolef(level string, c color, format string, v ...any) {
 	log.Printf(l.colorPrint(level, c)+": "+l.r.Method+" "+l.r.URL.Path+" "+format, v...)
 }
 

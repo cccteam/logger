@@ -9,7 +9,6 @@ import (
 
 	"cloud.google.com/go/logging"
 	"contrib.go.opencensus.io/exporter/stackdriver/propagation"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -62,7 +61,7 @@ type gcpHandler struct {
 
 func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	begin := time.Now()
-	traceID := gcpTraceIDFromRequest(r, g.projectID)
+	traceID := gcpTraceIDFromRequest(r, g.projectID, generateID)
 	l := newGCPLogger(g.childLogger, traceID)
 	r = r.WithContext(newContext(r.Context(), l))
 	sw := &statusWriter{ResponseWriter: w}
@@ -91,7 +90,7 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Trace:        traceID,
 		SpanID:       sc.SpanID().String(),
 		TraceSampled: sc.IsSampled(),
-		Payload: map[string]interface{}{
+		Payload: map[string]any{
 			"message": "Parent Log Entry",
 		},
 		HTTPRequest: &logging.HTTPRequest{
@@ -106,17 +105,15 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // gcpTraceIDFromRequest formats a trace_id value for GCP Stackdriver
-func gcpTraceIDFromRequest(r *http.Request, projectID string) string {
+func gcpTraceIDFromRequest(r *http.Request, projectID string, idgen func() string) string {
 	var traceID string
-	if sc, ok := new(propagation.HTTPFormat).SpanContextFromRequest(r); ok {
-		traceID = sc.TraceID.String()
+	if sc := trace.SpanFromContext(r.Context()).SpanContext(); sc.IsValid() {
+		traceID = sc.TraceID().String()
 	} else {
-		sc := trace.SpanFromContext(r.Context()).SpanContext()
-		if sc.IsValid() {
-			traceID = sc.TraceID().String()
+		if sc1, ok := new(propagation.HTTPFormat).SpanContextFromRequest(r); ok {
+			traceID = sc1.TraceID.String()
 		} else {
-			_, span := otel.Tracer("").Start(r.Context(), r.URL.String())
-			traceID = span.SpanContext().TraceID().String()
+			traceID = idgen()
 		}
 	}
 
@@ -144,46 +141,46 @@ func newGCPLogger(lg logger, traceID string) *gcpLogger {
 }
 
 // Debug logs a debug message.
-func (l *gcpLogger) Debug(ctx context.Context, v interface{}) {
+func (l *gcpLogger) Debug(ctx context.Context, v any) {
 	l.log(ctx, logging.Debug, v)
 }
 
 // Debugf logs a debug message with format.
-func (l *gcpLogger) Debugf(ctx context.Context, format string, v ...interface{}) {
+func (l *gcpLogger) Debugf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, logging.Debug, fmt.Sprintf(format, v...))
 }
 
 // Info logs a info message.
-func (l *gcpLogger) Info(ctx context.Context, v interface{}) {
+func (l *gcpLogger) Info(ctx context.Context, v any) {
 	l.log(ctx, logging.Info, v)
 }
 
 // Infof logs a info message with format.
-func (l *gcpLogger) Infof(ctx context.Context, format string, v ...interface{}) {
+func (l *gcpLogger) Infof(ctx context.Context, format string, v ...any) {
 	l.log(ctx, logging.Info, fmt.Sprintf(format, v...))
 }
 
 // Warn logs a warning message.
-func (l *gcpLogger) Warn(ctx context.Context, v interface{}) {
+func (l *gcpLogger) Warn(ctx context.Context, v any) {
 	l.log(ctx, logging.Warning, v)
 }
 
 // Warnf logs a warning message with format.
-func (l *gcpLogger) Warnf(ctx context.Context, format string, v ...interface{}) {
+func (l *gcpLogger) Warnf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, logging.Warning, fmt.Sprintf(format, v...))
 }
 
 // Error logs an error message.
-func (l *gcpLogger) Error(ctx context.Context, v interface{}) {
+func (l *gcpLogger) Error(ctx context.Context, v any) {
 	l.log(ctx, logging.Error, v)
 }
 
 // Errorf logs an error message with format.
-func (l *gcpLogger) Errorf(ctx context.Context, format string, v ...interface{}) {
+func (l *gcpLogger) Errorf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, logging.Error, fmt.Sprintf(format, v...))
 }
 
-func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, p interface{}) {
+func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, p any) {
 	l.mu.Lock()
 	if l.maxSeverity < severity {
 		l.maxSeverity = severity
@@ -199,7 +196,7 @@ func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, p interf
 
 	l.lg.Log(
 		logging.Entry{
-			Payload: map[string]interface{}{
+			Payload: map[string]any{
 				"message": p,
 			},
 			Severity:     severity,

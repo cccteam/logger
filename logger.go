@@ -1,10 +1,12 @@
 // package logger is an HTTP request logger that implements correlated logging to one of several supported platforms.
 // Each HTTP request is logged as the parent log, with all logs generated during the request as child logs.
 //
-// The Logging destination is configured with an Exporter. This package provides Exporters for Google Cloud Logging
+// The Logging destination is configured with an Exporter. This package provides Exporters for Google Cloud Logging, AWS CloudWatch,
 // and Console Logging.
 //
 // The GoogleCloudExporter will also correlate logs to Cloud Trace if you instrument your code with tracing.
+//
+// The AWSExporter supports log correlation to AWS X-Ray if you instrument your code with tracing.
 package logger
 
 import (
@@ -37,41 +39,41 @@ func Req(r *http.Request) *Logger {
 }
 
 // Debug logs a debug message.
-func (l *Logger) Debug(v interface{}) {
+func (l *Logger) Debug(v any) {
 	l.lg.Debug(l.ctx, v)
 }
 
 // Debugf logs a debug message with format.
-func (l *Logger) Debugf(format string, v ...interface{}) {
+func (l *Logger) Debugf(format string, v ...any) {
 	l.lg.Debugf(l.ctx, format, v...)
 }
 
 // Info logs a info message.
-func (l *Logger) Info(v interface{}) {
+func (l *Logger) Info(v any) {
 	l.lg.Info(l.ctx, v)
 }
 
 // Infof logs a info message with format.
-func (l *Logger) Infof(format string, v ...interface{}) {
+func (l *Logger) Infof(format string, v ...any) {
 	l.lg.Infof(l.ctx, format, v...)
 }
 
 // Warn logs a warning message.
-func (l *Logger) Warn(v interface{}) {
+func (l *Logger) Warn(v any) {
 	l.lg.Warn(l.ctx, v)
 }
 
 // Warnf logs a warning message with format.
-func (l *Logger) Warnf(format string, v ...interface{}) {
+func (l *Logger) Warnf(format string, v ...any) {
 	l.lg.Warnf(l.ctx, format, v...)
 }
 
 // Error logs an error message.
-func (l *Logger) Error(v interface{}) {
+func (l *Logger) Error(v any) {
 	l.lg.Error(l.ctx, v)
 }
 
 // Errorf logs an error message with format.
-func (l *Logger) Errorf(format string, v ...interface{}) {
+func (l *Logger) Errorf(format string, v ...any) {
 	l.lg.Errorf(l.ctx, format, v...)
 }
