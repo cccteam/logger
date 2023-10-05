@@ -6,7 +6,7 @@
 //
 // The GoogleCloudExporter will also correlate logs to Cloud Trace if you instrument your code with tracing.
 //
-// The StdoutExporter supports log correlation to AWS X-Ray if you instrument your code with tracing.
+// The AWSExporter supports log correlation to AWS X-Ray if you instrument your code with tracing.
 package logger
 
 import (
