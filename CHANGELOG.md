@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/cccteam/logger/compare/v0.1.1...v0.1.2) (2023-10-05)
+
+
+### Features
+
+* AWS Log Exporter ([d3a0f80](https://github.com/cccteam/logger/commit/d3a0f80ca304d722a7689a47a12d6cca24f0dbd0))
+
 ## [0.1.1](https://github.com/jtwatson/logger/compare/v0.1.0...v0.1.1) (2023-08-10)
 
 
