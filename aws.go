@@ -29,19 +29,17 @@ func NewAWSExporter(logAll bool) *AWSExporter {
 func (e *AWSExporter) Middleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return &awsHandler{
-			next:         next,
-			parentLogger: slog.New(slog.NewJSONHandler(os.Stdout, nil)).WithGroup("request_parent_log"),
-			childLogger:  slog.New(slog.NewJSONHandler(os.Stdout, nil)).WithGroup("request_child_log"),
-			logAll:       e.logAll,
+			next:   next,
+			logger: slog.New(slog.NewJSONHandler(os.Stdout, nil)),
+			logAll: e.logAll,
 		}
 	}
 }
 
 type awsHandler struct {
-	next         http.Handler
-	parentLogger awslog
-	childLogger  awslog
-	logAll       bool
+	next   http.Handler
+	logger awslog
+	logAll bool
 }
 
 // ServeHTTP implements http.Handler
@@ -50,7 +48,7 @@ type awsHandler struct {
 func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	begin := time.Now()
 	xrayTraceID := awsTraceIDFromRequest(r, generateID)
-	l := newAWSLogger(h.childLogger, xrayTraceID)
+	l := newAWSLogger(h.logger, xrayTraceID)
 	r = r.WithContext(newContext(r.Context(), l))
 	sw := &statusWriter{ResponseWriter: w}
 
@@ -77,7 +75,7 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.String("http.elapsed", time.Since(begin).String()),
 	}
 	logAttr = append(logAttr, httpAttributes(r, sw)...)
-	h.parentLogger.LogAttrs(r.Context(), maxLevel, "Parent Log Entry", logAttr...)
+	h.logger.LogAttrs(r.Context(), maxLevel, "Parent Log Entry", logAttr...)
 }
 
 type awsLogger struct {

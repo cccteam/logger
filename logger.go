@@ -11,8 +11,6 @@ package logger
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"net/http"
 )
 
@@ -78,13 +76,4 @@ func (l *Logger) Error(v any) {
 // Errorf logs an error message with format.
 func (l *Logger) Errorf(format string, v ...any) {
 	l.lg.Errorf(l.ctx, format, v...)
-}
-
-// generateID provides an id that matches the trace id format
-func generateID() string {
-	t := [16]byte{}
-
-	_, _ = rand.Read(t[:])
-
-	return hex.EncodeToString(t[:])
 }

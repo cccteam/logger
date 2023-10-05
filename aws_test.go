@@ -77,10 +77,9 @@ func TestAWSExporter_Middleware(t *testing.T) {
 			},
 			want: func(next http.Handler) http.Handler {
 				return &awsHandler{
-					next:         next,
-					parentLogger: slog.New(slog.NewJSONHandler(os.Stdout, nil)).WithGroup("request_parent_log"),
-					childLogger:  slog.New(slog.NewJSONHandler(os.Stdout, nil)).WithGroup("request_child_log"),
-					logAll:       true,
+					next:   next,
+					logger: slog.New(slog.NewJSONHandler(os.Stdout, nil)).WithGroup("request_parent_log"),
+					logAll: true,
 				}
 			},
 		},
@@ -185,9 +184,8 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 			var handlerCalled bool
 			l := &captureSLogger{}
 			handler := &awsHandler{
-				parentLogger: l,
-				childLogger:  &captureSLogger{},
-				logAll:       tt.fields.logAll,
+				logger: l,
+				logAll: tt.fields.logAll,
 				next: http.HandlerFunc(
 					func(w http.ResponseWriter, r *http.Request) {
 						for i := 0; i < tt.args.logs; i++ {
