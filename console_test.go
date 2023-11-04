@@ -11,7 +11,10 @@ import (
 	"reflect"
 	"testing"
 
+	"cloud.google.com/go/logging"
 	"github.com/go-test/deep"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func TestNewConsoleExporter(t *testing.T) {
@@ -184,15 +187,16 @@ func TestNewConsoleLogger(t *testing.T) {
 				r:       &http.Request{},
 				noColor: true,
 			},
-			want: &consoleLogger{r: &http.Request{}, noColor: true},
+			want: &consoleLogger{r: &http.Request{}, noColor: true, maxSeverity: logging.Debug},
 		},
 	}
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := newConsoleLogger(tt.args.r, tt.args.noColor); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewConsoleLogger() = %v, want %v", got, tt.want)
+			got := newConsoleLogger(tt.args.r, tt.args.noColor)
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(consoleLogger{}), cmpopts.IgnoreFields(consoleLogger{}, "r", "mu")); diff != "" {
+				t.Errorf("NewConsoleLogger() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
