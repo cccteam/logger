@@ -72,8 +72,8 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l.consolef(
-		maxSeverity, severityColor(maxSeverity), "%s %s %d %s requestSize=%d logCount=%d",
-		r.Method, r.URL.Path, sw.Status(), time.Since(begin), requestSize(r.Header.Get("Content-Length")), logCount,
+		maxSeverity, severityColor(maxSeverity), "%s %s %d %s requestSize=%d responseSize=%d logCount=%d",
+		r.Method, r.URL.Path, sw.Status(), time.Since(begin), requestSize(r.Header.Get("Content-Length")), sw.length, logCount,
 	)
 }
 
