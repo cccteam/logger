@@ -2,8 +2,13 @@ package logger
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
+	"sync"
+	"time"
+
+	"cloud.google.com/go/logging"
 )
 
 type color int
@@ -48,72 +53,114 @@ type consoleHandler struct {
 }
 
 func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	r = r.WithContext(newContext(r.Context(), newConsoleLogger(r, c.noColor)))
-	c.next.ServeHTTP(w, r)
+	begin := time.Now()
+	l := newConsoleLogger(r, c.noColor)
+	r = r.WithContext(newContext(r.Context(), l))
+	sw := &statusWriter{ResponseWriter: w}
+
+	c.next.ServeHTTP(sw, r)
+
+	l.mu.Lock()
+	logCount := l.logCount
+	maxSeverity := l.maxSeverity
+	l.mu.Unlock()
+
+	// status code should also set the minimum maxSeverity to Error
+	if sw.Status() > 399 && maxSeverity < logging.Error {
+		maxSeverity = logging.Error
+	}
+
+	l.consolef(
+		maxSeverity, severityColor(maxSeverity), "%s %s %d %s requestSize=%d logCount=%d",
+		l.r.Method, l.r.URL.Path, sw.Status(), time.Since(begin), requestSize(r.Header.Get("Content-Length")), logCount,
+	)
 }
 
 type consoleLogger struct {
-	r       *http.Request
-	noColor bool
+	r           *http.Request
+	noColor     bool
+	mu          sync.Mutex
+	maxSeverity logging.Severity
+	logCount    int
 }
 
 // newConsoleLogger logs all output to console
 func newConsoleLogger(r *http.Request, noColor bool) *consoleLogger {
-	return &consoleLogger{r: r, noColor: noColor}
+	return &consoleLogger{r: r, noColor: noColor, maxSeverity: logging.Debug}
 }
 
 // Debug logs a debug message.
 func (l *consoleLogger) Debug(_ context.Context, v any) {
-	l.console("DEBUG", gray, v)
+	l.console(logging.Debug, gray, v)
 }
 
 // Debugf logs a debug message with format.
 func (l *consoleLogger) Debugf(_ context.Context, format string, v ...any) {
-	l.consolef("DEBUG", gray, format, v...)
+	l.consolef(logging.Debug, gray, format, v...)
 }
 
 // Info logs a info message.
 func (l *consoleLogger) Info(_ context.Context, v any) {
-	l.console("INFO ", blue, v)
+	l.console(logging.Info, blue, v)
 }
 
 // Infof logs a info message with format.
 func (l *consoleLogger) Infof(_ context.Context, format string, v ...any) {
-	l.consolef("INFO ", blue, format, v...)
+	l.consolef(logging.Info, blue, format, v...)
 }
 
 // Warn logs a warning message.
 func (l *consoleLogger) Warn(_ context.Context, v any) {
-	l.console("WARN ", yellow, v)
+	l.console(logging.Warning, yellow, v)
 }
 
 // Warnf logs a warning message with format.
 func (l *consoleLogger) Warnf(_ context.Context, format string, v ...any) {
-	l.consolef("WARN ", yellow, format, v...)
+	l.consolef(logging.Warning, yellow, format, v...)
 }
 
 // Error logs an error message.
 func (l *consoleLogger) Error(_ context.Context, v any) {
-	l.console("ERROR", red, v)
+	l.console(logging.Error, red, v)
 }
 
 // Errorf logs an error message with format.
 func (l *consoleLogger) Errorf(_ context.Context, format string, v ...any) {
-	l.consolef("ERROR", red, format, v...)
+	l.consolef(logging.Error, red, format, v...)
 }
 
-func (l *consoleLogger) console(level string, c color, v any) {
+func (l *consoleLogger) console(level logging.Severity, c color, v any) {
 	log.Printf(l.colorPrint(level, c)+": %s %s", l.r.URL.Path, v)
 }
 
-func (l *consoleLogger) consolef(level string, c color, format string, v ...any) {
-	log.Printf(l.colorPrint(level, c)+": "+l.r.Method+" "+l.r.URL.Path+" "+format, v...)
+func (l *consoleLogger) consolef(level logging.Severity, c color, format string, v ...any) {
+	log.Printf(l.colorPrint(level, c)+": "+format, v...)
 }
 
-func (l *consoleLogger) colorPrint(s string, c color) string {
+func (l *consoleLogger) colorPrint(s logging.Severity, c color) string {
+	l.mu.Lock()
+	if l.maxSeverity < s {
+		l.maxSeverity = s
+	}
+	l.logCount++
+	l.mu.Unlock()
+
 	if l.noColor {
-		return s
+		return s.String()
 	}
 
-	return string([]byte{0x1b, '[', byte('0' + c/10), byte('0' + c%10), 'm'}) + s + "\x1b[0m"
+	return fmt.Sprintf("%s%5s%s", string([]byte{0x1b, '[', byte('0' + c/10), byte('0' + c%10), 'm'}), s.String(), "\x1b[0m")
+}
+
+func severityColor(level logging.Severity) color {
+	switch level {
+	case logging.Error:
+		return red
+	case logging.Warning:
+		return yellow
+	case logging.Info:
+		return blue
+	default:
+		return gray
+	}
 }

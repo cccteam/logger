@@ -13,6 +13,8 @@ import (
 
 	"cloud.google.com/go/logging"
 	"github.com/go-test/deep"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
@@ -49,8 +51,9 @@ func TestNewGoogleCloudExporter(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := NewGoogleCloudExporter(tt.args.client, tt.args.projectID, tt.args.opts...); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewGoogleCloudExporter() = %v, want %v", got, tt.want)
+			got := NewGoogleCloudExporter(tt.args.client, tt.args.projectID, tt.args.opts...)
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(GoogleCloudExporter{}, logging.Client{}), cmpopts.IgnoreFields(logging.Client{}, "client", "loggers", "mu")); diff != "" {
+				t.Errorf("NewGoogleCloudExporter() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -99,8 +102,9 @@ func TestGoogleCloudExporter_LogAll(t *testing.T) {
 			e := &GoogleCloudExporter{
 				logAll: tt.fields.logAll,
 			}
-			if got := e.LogAll(tt.args.v); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GoogleCloudExporter.LogAll() = %v, want %v", got, tt.want)
+			got := e.LogAll(tt.args.v)
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(GoogleCloudExporter{})); diff != "" {
+				t.Errorf("GoogleCloudExporter.LogAll() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
