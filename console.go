@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -72,7 +73,7 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	l.consolef(
 		maxSeverity, severityColor(maxSeverity), "%s %s %d %s requestSize=%d logCount=%d",
-		l.r.Method, l.r.URL.Path, sw.Status(), time.Since(begin), requestSize(r.Header.Get("Content-Length")), logCount,
+		r.Method, r.URL.Path, sw.Status(), time.Since(begin), requestSize(r.Header.Get("Content-Length")), logCount,
 	)
 }
 
@@ -130,26 +131,31 @@ func (l *consoleLogger) Errorf(_ context.Context, format string, v ...any) {
 }
 
 func (l *consoleLogger) console(level logging.Severity, c color, v any) {
-	log.Printf(l.colorPrint(level, c)+": %s %s", l.r.URL.Path, v)
+	log.Printf(l.colorPrint(level, c)+": %s", v)
 }
 
 func (l *consoleLogger) consolef(level logging.Severity, c color, format string, v ...any) {
 	log.Printf(l.colorPrint(level, c)+": "+format, v...)
 }
 
-func (l *consoleLogger) colorPrint(s logging.Severity, c color) string {
+func (l *consoleLogger) colorPrint(level logging.Severity, c color) string {
 	l.mu.Lock()
-	if l.maxSeverity < s {
-		l.maxSeverity = s
+	if l.maxSeverity < level {
+		l.maxSeverity = level
 	}
 	l.logCount++
 	l.mu.Unlock()
 
-	if l.noColor {
-		return s.String()
+	strLevel := strings.ToUpper(level.String())
+	if level == logging.Warning {
+		strLevel = strLevel[:4]
 	}
 
-	return fmt.Sprintf("%s%5s%s", string([]byte{0x1b, '[', byte('0' + c/10), byte('0' + c%10), 'm'}), s.String(), "\x1b[0m")
+	if l.noColor {
+		return fmt.Sprintf("%-5s", strLevel)
+	}
+
+	return fmt.Sprintf("%s%-5s%s", string([]byte{0x1b, '[', byte('0' + c/10), byte('0' + c%10), 'm'}), strLevel, "\x1b[0m")
 }
 
 func severityColor(level logging.Severity) color {

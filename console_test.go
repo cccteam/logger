@@ -218,17 +218,17 @@ func Test_consoleLogger(t *testing.T) {
 	}{
 		{
 			name: "Test with color", args: args{v: []any{"Message"}, v2: "Message"},
-			wantDebug: "\x1b[37mDEBUG\x1b[0m: /path Message\n", wantDebugf: "\x1b[37mDEBUG\x1b[0m: GET /path Formatted Message\n",
-			wantInfo: "\x1b[34mINFO \x1b[0m: /path Message\n", wantInfof: "\x1b[34mINFO \x1b[0m: GET /path Formatted Message\n",
-			wantWarn: "\x1b[33mWARN \x1b[0m: /path Message\n", wantWarnf: "\x1b[33mWARN \x1b[0m: GET /path Formatted Message\n",
-			wantError: "\x1b[31mERROR\x1b[0m: /path Message\n", wantErrorf: "\x1b[31mERROR\x1b[0m: GET /path Formatted Message\n",
+			wantDebug: "\x1b[37mDEBUG\x1b[0m: Message\n", wantDebugf: "\x1b[37mDEBUG\x1b[0m: Formatted Message\n",
+			wantInfo: "\x1b[34mINFO \x1b[0m: Message\n", wantInfof: "\x1b[34mINFO \x1b[0m: Formatted Message\n",
+			wantWarn: "\x1b[33mWARN \x1b[0m: Message\n", wantWarnf: "\x1b[33mWARN \x1b[0m: Formatted Message\n",
+			wantError: "\x1b[31mERROR\x1b[0m: Message\n", wantErrorf: "\x1b[31mERROR\x1b[0m: Formatted Message\n",
 		},
 		{
 			name: "Test no color", args: args{v: []any{"Message"}, v2: "Message", noColor: true},
-			wantDebug: "DEBUG: /path Message\n", wantDebugf: "DEBUG: GET /path Formatted Message\n",
-			wantInfo: "INFO : /path Message\n", wantInfof: "INFO : GET /path Formatted Message\n",
-			wantWarn: "WARN : /path Message\n", wantWarnf: "WARN : GET /path Formatted Message\n",
-			wantError: "ERROR: /path Message\n", wantErrorf: "ERROR: GET /path Formatted Message\n",
+			wantDebug: "DEBUG: Message\n", wantDebugf: "DEBUG: Formatted Message\n",
+			wantInfo: "INFO : Message\n", wantInfof: "INFO : Formatted Message\n",
+			wantWarn: "WARN : Message\n", wantWarnf: "WARN : Formatted Message\n",
+			wantError: "ERROR: Message\n", wantErrorf: "ERROR: Formatted Message\n",
 		},
 	}
 	for _, tt := range tests {
