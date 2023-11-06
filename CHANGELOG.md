@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/cccteam/logger/compare/v0.1.2...v0.1.3) (2023-11-06)
+
+
+### Features
+
+* Add request logging to ConsoleExporter ([#11](https://github.com/cccteam/logger/issues/11)) ([c5d641d](https://github.com/cccteam/logger/commit/c5d641d585f29bc3d7a115621ffb5c04160e02c9))
+
 ## [0.1.2](https://github.com/cccteam/logger/compare/v0.1.1...v0.1.2) (2023-10-05)
 
 
