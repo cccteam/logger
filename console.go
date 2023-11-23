@@ -83,6 +83,7 @@ type consoleLogger struct {
 	mu          sync.Mutex
 	maxSeverity logging.Severity
 	logCount    int
+	attributes  map[string]any
 }
 
 // newConsoleLogger logs all output to console
@@ -128,6 +129,17 @@ func (l *consoleLogger) Error(_ context.Context, v any) {
 // Errorf logs an error message with format.
 func (l *consoleLogger) Errorf(_ context.Context, format string, v ...any) {
 	l.consolef(logging.Error, red, format, v...)
+}
+
+// AddAttributes adds attributes to include in automated logs
+func (l *consoleLogger) AddAttributes(attrbs map[string]any) {
+	if l.attributes == nil {
+		l.attributes = make(map[string]any)
+	}
+
+	for k, v := range attrbs {
+		l.attributes[k] = v
+	}
 }
 
 func (l *consoleLogger) console(level logging.Severity, c color, v any) {

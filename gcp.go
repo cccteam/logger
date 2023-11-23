@@ -71,6 +71,7 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l.mu.Lock()
 	logCount := l.logCount
 	maxSeverity := l.maxSeverity
+	attributes := l.attributes
 	l.mu.Unlock()
 
 	if !g.logAll && logCount == 0 {
@@ -84,6 +85,11 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	sc := trace.SpanFromContext(r.Context()).SpanContext()
 
+	message := parentLogEntry
+	for k, v := range attributes {
+		message += fmt.Sprintf(", %s: %v", k, v)
+	}
+
 	g.parentLogger.Log(logging.Entry{
 		Timestamp:    begin,
 		Severity:     maxSeverity,
@@ -91,7 +97,7 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		SpanID:       sc.SpanID().String(),
 		TraceSampled: sc.IsSampled(),
 		Payload: map[string]any{
-			"message": "Parent Log Entry",
+			"message": message,
 		},
 		HTTPRequest: &logging.HTTPRequest{
 			Request:      r,
@@ -131,6 +137,7 @@ type gcpLogger struct {
 	mu          sync.Mutex
 	maxSeverity logging.Severity
 	logCount    int
+	attributes  map[string]any
 }
 
 func newGCPLogger(lg logger, traceID string) *gcpLogger {
@@ -178,6 +185,17 @@ func (l *gcpLogger) Error(ctx context.Context, v any) {
 // Errorf logs an error message with format.
 func (l *gcpLogger) Errorf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, logging.Error, fmt.Sprintf(format, v...))
+}
+
+// AddAttributes adds attributes to include in automated logs
+func (l *gcpLogger) AddAttributes(attrbs map[string]any) {
+	if l.attributes == nil {
+		l.attributes = make(map[string]any)
+	}
+
+	for k, v := range attrbs {
+		l.attributes[k] = v
+	}
 }
 
 func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, p any) {

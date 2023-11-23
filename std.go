@@ -3,9 +3,13 @@ package logger
 import (
 	"context"
 	"log"
+	"sync"
 )
 
-type stdErrLogger struct{}
+type stdErrLogger struct {
+	mu         sync.Mutex
+	attributes map[string]any
+}
 
 // Debug logs a debug message.
 func (l *stdErrLogger) Debug(_ context.Context, v any) {
@@ -45,6 +49,19 @@ func (l *stdErrLogger) Error(_ context.Context, v any) {
 // Errorf logs an error message with format.
 func (l *stdErrLogger) Errorf(_ context.Context, format string, v ...any) {
 	stdf("ERROR", format, v...)
+}
+
+// AddAttributes adds attributes to include in automated logs
+func (l *stdErrLogger) AddAttributes(attrbs map[string]any) {
+	l.mu.Lock()
+	if l.attributes == nil {
+		l.attributes = make(map[string]any)
+	}
+
+	for k, v := range attrbs {
+		l.attributes[k] = v
+	}
+	l.mu.Unlock()
 }
 
 func std(level string, v ...any) {

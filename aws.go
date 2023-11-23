@@ -57,6 +57,7 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l.mu.Lock()
 	logCount := l.logCount
 	maxLevel := l.maxLevel
+	attributes := l.attributes
 	l.mu.Unlock()
 
 	if !h.logAll && logCount == 0 {
@@ -74,16 +75,21 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.Any("span_id", sc.SpanID().String()),
 		slog.String("http.elapsed", time.Since(begin).String()),
 	}
+	for k, v := range attributes {
+		logAttr = append(logAttr, slog.Any(k, v))
+	}
+
 	logAttr = append(logAttr, httpAttributes(r, sw)...)
-	h.logger.LogAttrs(r.Context(), maxLevel, "Parent Log Entry", logAttr...)
+	h.logger.LogAttrs(r.Context(), maxLevel, parentLogEntry, logAttr...)
 }
 
 type awsLogger struct {
-	logger   awslog
-	traceID  string
-	mu       sync.Mutex
-	maxLevel slog.Level
-	logCount int
+	logger     awslog
+	traceID    string
+	mu         sync.Mutex
+	maxLevel   slog.Level
+	logCount   int
+	attributes map[string]any
 }
 
 func newAWSLogger(logger awslog, traceID string) *awsLogger {
@@ -135,6 +141,19 @@ func (l *awsLogger) Error(ctx context.Context, v any) {
 // Errorf logs an error message with format.
 func (l *awsLogger) Errorf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, slog.LevelError, fmt.Sprintf(format, v...))
+}
+
+// AddAttributes adds attributes to include in automated logs
+func (l *awsLogger) AddAttributes(attrbs map[string]any) {
+	l.mu.Lock()
+	if l.attributes == nil {
+		l.attributes = make(map[string]any)
+	}
+
+	for k, v := range attrbs {
+		l.attributes[k] = v
+	}
+	l.mu.Unlock()
 }
 
 func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {

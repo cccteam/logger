@@ -14,6 +14,8 @@ import (
 	"net/http"
 )
 
+const parentLogEntry = "Parent Log Entry"
+
 // Logger implements logging methods for this package
 type Logger struct {
 	ctx context.Context
@@ -76,4 +78,9 @@ func (l *Logger) Error(v any) {
 // Errorf logs an error message with format.
 func (l *Logger) Errorf(format string, v ...any) {
 	l.lg.Errorf(l.ctx, format, v...)
+}
+
+// AddAttributes adds attributes to include in automated logs
+func (l *Logger) AddAttributes(attrbs map[string]any) {
+	l.lg.AddAttributes(attrbs)
 }
