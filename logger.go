@@ -80,9 +80,9 @@ func (l *Logger) Errorf(format string, v ...any) {
 	l.lg.Errorf(l.ctx, format, v...)
 }
 
-// AddAttributes adds attributes to include in middleware-driven logs
-func (l *Logger) AddAttributes(attrbs map[string]any) {
-	l.lg.AddAttributes(attrbs)
+// AddRequestAttribute adds an attribute (key, value) for the parent request log. If the key already exists, its value is overwritten
+func (l *Logger) AddRequestAttribute(key string, value any) {
+	l.lg.AddRequestAttribute(key, value)
 }
 
 // RemoveAttributes removes attributes from the logger

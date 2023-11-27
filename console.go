@@ -137,16 +137,16 @@ func (l *consoleLogger) Errorf(_ context.Context, format string, v ...any) {
 	l.consolef(logging.Error, red, format, v...)
 }
 
-// AddAttributes adds attributes to include in middleware-driven logs
-func (l *consoleLogger) AddAttributes(attrbs map[string]any) {
+// AddRequestAttribute adds an attribute (key, value) for the parent request log
+// If the key already exists, its value is overwritten
+func (l *consoleLogger) AddRequestAttribute(key string, value any) {
 	l.mu.Lock()
-	for k, v := range attrbs {
-		l.attributes[k] = v
-	}
+	l.attributes[key] = value
 	l.mu.Unlock()
 }
 
 // RemoveAttributes removes attributes from the logger
+// If a key does not exist, it is ignored
 func (l *consoleLogger) RemoveAttributes(keys ...string) {
 	l.mu.Lock()
 	for _, k := range keys {

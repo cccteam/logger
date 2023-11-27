@@ -144,16 +144,16 @@ func (l *awsLogger) Errorf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, slog.LevelError, fmt.Sprintf(format, v...))
 }
 
-// AddAttributes adds attributes to include in middleware-driven logs
-func (l *awsLogger) AddAttributes(attrbs map[string]any) {
+// AddRequestAttribute adds an attribute (key, value) for the parent request log
+// If the key already exists, its value is overwritten
+func (l *awsLogger) AddRequestAttribute(key string, value any) {
 	l.mu.Lock()
-	for k, v := range attrbs {
-		l.attributes[k] = v
-	}
+	l.attributes[key] = value
 	l.mu.Unlock()
 }
 
 // RemoveAttributes removes attributes from the logger
+// If a key does not exist, it is ignored
 func (l *awsLogger) RemoveAttributes(keys ...string) {
 	l.mu.Lock()
 	for _, k := range keys {
