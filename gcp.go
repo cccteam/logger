@@ -198,6 +198,15 @@ func (l *gcpLogger) AddAttributes(attrbs map[string]any) {
 	}
 }
 
+// RemoveAttributes removes attributes from the logger
+func (l *gcpLogger) RemoveAttributes(keys ...string) {
+	l.mu.Lock()
+	for _, k := range keys {
+		delete(l.attributes, k)
+	}
+	l.mu.Unlock()
+}
+
 func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, p any) {
 	l.mu.Lock()
 	if l.maxSeverity < severity {

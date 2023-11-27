@@ -64,6 +64,15 @@ func (l *stdErrLogger) AddAttributes(attrbs map[string]any) {
 	l.mu.Unlock()
 }
 
+// RemoveAttributes removes attributes from the logger
+func (l *stdErrLogger) RemoveAttributes(keys ...string) {
+	l.mu.Lock()
+	for _, k := range keys {
+		delete(l.attributes, k)
+	}
+	l.mu.Unlock()
+}
+
 func std(level string, v ...any) {
 	log.Printf(level+": %s", v...)
 }

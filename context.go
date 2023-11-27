@@ -59,4 +59,6 @@ type ctxLogger interface {
 	Errorf(ctx context.Context, format string, v ...any)
 	// AddAttributes adds attributes to include in middleware-driven logs
 	AddAttributes(attrbs map[string]any)
+	// RemoveAttributes removes attributes from the logger. If a key is not found, it is ignored
+	RemoveAttributes(keys ...string)
 }

@@ -144,6 +144,15 @@ func (l *consoleLogger) AddAttributes(attrbs map[string]any) {
 	}
 }
 
+// RemoveAttributes removes attributes from the logger
+func (l *consoleLogger) RemoveAttributes(keys ...string) {
+	l.mu.Lock()
+	for _, k := range keys {
+		delete(l.attributes, k)
+	}
+	l.mu.Unlock()
+}
+
 func (l *consoleLogger) console(level logging.Severity, c color, v any) {
 	log.Printf(l.colorPrint(level, c)+": %s", v)
 }

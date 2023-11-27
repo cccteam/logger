@@ -156,6 +156,15 @@ func (l *awsLogger) AddAttributes(attrbs map[string]any) {
 	l.mu.Unlock()
 }
 
+// RemoveAttributes removes attributes from the logger
+func (l *awsLogger) RemoveAttributes(keys ...string) {
+	l.mu.Lock()
+	for _, k := range keys {
+		delete(l.attributes, k)
+	}
+	l.mu.Unlock()
+}
+
 func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
 	l.mu.Lock()
 	if l.maxLevel < level {

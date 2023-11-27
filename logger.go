@@ -84,3 +84,8 @@ func (l *Logger) Errorf(format string, v ...any) {
 func (l *Logger) AddAttributes(attrbs map[string]any) {
 	l.lg.AddAttributes(attrbs)
 }
+
+// RemoveAttributes removes attributes from the logger
+func (l *Logger) RemoveAttributes(keys ...string) {
+	l.lg.RemoveAttributes(keys...)
+}
