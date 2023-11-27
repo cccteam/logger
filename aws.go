@@ -94,8 +94,9 @@ type awsLogger struct {
 
 func newAWSLogger(logger awslog, traceID string) *awsLogger {
 	return &awsLogger{
-		logger:  logger,
-		traceID: traceID,
+		logger:     logger,
+		traceID:    traceID,
+		attributes: make(map[string]any),
 	}
 }
 
@@ -146,10 +147,6 @@ func (l *awsLogger) Errorf(ctx context.Context, format string, v ...any) {
 // AddAttributes adds attributes to include in middleware-driven logs
 func (l *awsLogger) AddAttributes(attrbs map[string]any) {
 	l.mu.Lock()
-	if l.attributes == nil {
-		l.attributes = make(map[string]any)
-	}
-
 	for k, v := range attrbs {
 		l.attributes[k] = v
 	}

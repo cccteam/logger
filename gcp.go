@@ -142,8 +142,9 @@ type gcpLogger struct {
 
 func newGCPLogger(lg logger, traceID string) *gcpLogger {
 	return &gcpLogger{
-		lg:      lg,
-		traceID: traceID,
+		lg:         lg,
+		traceID:    traceID,
+		attributes: make(map[string]any),
 	}
 }
 
@@ -190,10 +191,6 @@ func (l *gcpLogger) Errorf(ctx context.Context, format string, v ...any) {
 // AddAttributes adds attributes to include in middleware-driven logs
 func (l *gcpLogger) AddAttributes(attrbs map[string]any) {
 	l.mu.Lock()
-	if l.attributes == nil {
-		l.attributes = make(map[string]any)
-	}
-
 	for k, v := range attrbs {
 		l.attributes[k] = v
 	}
