@@ -143,7 +143,7 @@ func (l *awsLogger) Errorf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, slog.LevelError, fmt.Sprintf(format, v...))
 }
 
-// AddAttributes adds attributes to include in automated logs
+// AddAttributes adds attributes to include in middleware-driven logs
 func (l *awsLogger) AddAttributes(attrbs map[string]any) {
 	l.mu.Lock()
 	if l.attributes == nil {

@@ -80,7 +80,7 @@ func (l *Logger) Errorf(format string, v ...any) {
 	l.lg.Errorf(l.ctx, format, v...)
 }
 
-// AddAttributes adds attributes to include in automated logs
+// AddAttributes adds attributes to include in middleware-driven logs
 func (l *Logger) AddAttributes(attrbs map[string]any) {
 	l.lg.AddAttributes(attrbs)
 }

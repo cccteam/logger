@@ -51,7 +51,7 @@ func (l *stdErrLogger) Errorf(_ context.Context, format string, v ...any) {
 	stdf("ERROR", format, v...)
 }
 
-// AddAttributes adds attributes to include in automated logs
+// AddAttributes adds attributes to include in middleware-driven logs
 func (l *stdErrLogger) AddAttributes(attrbs map[string]any) {
 	l.mu.Lock()
 	if l.attributes == nil {

@@ -57,6 +57,6 @@ type ctxLogger interface {
 	Error(ctx context.Context, v any)
 	// Errorf logs an error message with format.
 	Errorf(ctx context.Context, format string, v ...any)
-	// AddAttributes adds attributes to include in automated logs
+	// AddAttributes adds attributes to include in middleware-driven logs
 	AddAttributes(attrbs map[string]any)
 }

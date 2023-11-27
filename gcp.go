@@ -187,7 +187,7 @@ func (l *gcpLogger) Errorf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, logging.Error, fmt.Sprintf(format, v...))
 }
 
-// AddAttributes adds attributes to include in automated logs
+// AddAttributes adds attributes to include in middleware-driven logs
 func (l *gcpLogger) AddAttributes(attrbs map[string]any) {
 	if l.attributes == nil {
 		l.attributes = make(map[string]any)

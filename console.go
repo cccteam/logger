@@ -131,7 +131,7 @@ func (l *consoleLogger) Errorf(_ context.Context, format string, v ...any) {
 	l.consolef(logging.Error, red, format, v...)
 }
 
-// AddAttributes adds attributes to include in automated logs
+// AddAttributes adds attributes to include in middleware-driven logs
 func (l *consoleLogger) AddAttributes(attrbs map[string]any) {
 	if l.attributes == nil {
 		l.attributes = make(map[string]any)
