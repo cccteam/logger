@@ -85,9 +85,9 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	sc := trace.SpanFromContext(r.Context()).SpanContext()
 
-	message := parentLogEntry
+	msg := parentLogEntry
 	for k, v := range attributes {
-		message += fmt.Sprintf(", %s: %v", k, v)
+		msg += fmt.Sprintf(", %s: %v", k, v)
 	}
 
 	g.parentLogger.Log(logging.Entry{
@@ -97,7 +97,7 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		SpanID:       sc.SpanID().String(),
 		TraceSampled: sc.IsSampled(),
 		Payload: map[string]any{
-			"message": message,
+			"message": msg,
 		},
 		HTTPRequest: &logging.HTTPRequest{
 			Request:      r,

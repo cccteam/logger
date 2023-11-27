@@ -64,6 +64,7 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l.mu.Lock()
 	logCount := l.logCount
 	maxSeverity := l.maxSeverity
+	attributes := l.attributes
 	l.mu.Unlock()
 
 	// status code should also set the minimum maxSeverity to Error
@@ -71,10 +72,11 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		maxSeverity = logging.Error
 	}
 
-	l.consolef(
-		maxSeverity, severityColor(maxSeverity), "%s %s %d %s requestSize=%d responseSize=%d logCount=%d",
-		r.Method, r.URL.Path, sw.Status(), time.Since(begin), requestSize(r.Header.Get("Content-Length")), sw.length, logCount,
-	)
+	msg := fmt.Sprintf("%s %s %d %s requestSize=%d responseSize=%d logCount=%d", r.Method, r.URL.Path, sw.Status(), time.Since(begin), requestSize(r.Header.Get("Content-Length")), sw.length, logCount)
+	for k, v := range attributes {
+		msg += fmt.Sprintf(" %s=%v", k, v)
+	}
+	l.console(maxSeverity, severityColor(maxSeverity), msg)
 }
 
 type consoleLogger struct {
