@@ -135,6 +135,7 @@ func (l *consoleLogger) Errorf(_ context.Context, format string, v ...any) {
 
 // AddAttributes adds attributes to include in middleware-driven logs
 func (l *consoleLogger) AddAttributes(attrbs map[string]any) {
+	l.mu.Lock()
 	if l.attributes == nil {
 		l.attributes = make(map[string]any)
 	}
@@ -142,6 +143,7 @@ func (l *consoleLogger) AddAttributes(attrbs map[string]any) {
 	for k, v := range attrbs {
 		l.attributes[k] = v
 	}
+	l.mu.Unlock()
 }
 
 // RemoveAttributes removes attributes from the logger
