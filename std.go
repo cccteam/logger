@@ -3,13 +3,9 @@ package logger
 import (
 	"context"
 	"log"
-	"sync"
 )
 
-type stdErrLogger struct {
-	mu         sync.Mutex
-	attributes map[string]any
-}
+type stdErrLogger struct{}
 
 // Debug logs a debug message.
 func (l *stdErrLogger) Debug(_ context.Context, v any) {
@@ -52,27 +48,14 @@ func (l *stdErrLogger) Errorf(_ context.Context, format string, v ...any) {
 }
 
 // AddRequestAttribute adds an attribute (key, value) for the parent request log
-// If the key already exists, its value is overwritten
-func (l *stdErrLogger) AddRequestAttribute(key string, value any) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.attributes == nil {
-		l.attributes = make(map[string]any)
-	}
-	l.attributes[key] = value
-
+// For this std logger, there is no parent request log, so this is a no-op
+func (l *stdErrLogger) AddRequestAttribute(_ string, _ any) error {
 	return nil
 }
 
 // RemoveRequestAttributes removes attributes from the parent request log
-// If a key does not exist, it is ignored
-func (l *stdErrLogger) RemoveRequestAttributes(keys ...string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	for _, k := range keys {
-		delete(l.attributes, k)
-	}
-}
+// For this std logger, there is no parent request log, so this is a no-op
+func (l *stdErrLogger) RemoveRequestAttributes(_ ...string) {}
 
 func std(level string, v ...any) {
 	log.Printf(level+": %s", v...)
