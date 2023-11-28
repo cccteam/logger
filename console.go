@@ -163,9 +163,9 @@ func (l *consoleLogger) AddRequestAttribute(key string, value any) error {
 	return nil
 }
 
-// RemoveAttributes removes attributes from the logger
+// RemoveRequestAttributes removes attributes from the parent request log
 // If a key does not exist, it is ignored
-func (l *consoleLogger) RemoveAttributes(keys ...string) {
+func (l *consoleLogger) RemoveRequestAttributes(keys ...string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for _, k := range keys {

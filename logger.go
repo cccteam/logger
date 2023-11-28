@@ -91,7 +91,7 @@ func (l *Logger) AddRequestAttribute(key string, value any) error {
 	return nil
 }
 
-// RemoveAttributes removes attributes from the logger
-func (l *Logger) RemoveAttributes(keys ...string) {
-	l.lg.RemoveAttributes(keys...)
+// RemoveRequestAttributes removes attributes from the parent request log
+func (l *Logger) RemoveRequestAttributes(keys ...string) {
+	l.lg.RemoveRequestAttributes(keys...)
 }

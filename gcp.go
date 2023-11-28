@@ -200,9 +200,9 @@ func (l *gcpLogger) AddRequestAttribute(key string, value any) error {
 	return nil
 }
 
-// RemoveAttributes removes attributes from the logger
+// RemoveRequestAttributes removes attributes from the parent request log
 // If a key does not exist, it is ignored
-func (l *gcpLogger) RemoveAttributes(keys ...string) {
+func (l *gcpLogger) RemoveRequestAttributes(keys ...string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for _, k := range keys {
