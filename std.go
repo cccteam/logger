@@ -55,11 +55,11 @@ func (l *stdErrLogger) Errorf(_ context.Context, format string, v ...any) {
 // If the key already exists, its value is overwritten
 func (l *stdErrLogger) AddRequestAttribute(key string, value any) error {
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.attributes == nil {
 		l.attributes = make(map[string]any)
 	}
 	l.attributes[key] = value
-	l.mu.Unlock()
 
 	return nil
 }
@@ -68,10 +68,10 @@ func (l *stdErrLogger) AddRequestAttribute(key string, value any) error {
 // If a key does not exist, it is ignored
 func (l *stdErrLogger) RemoveAttributes(keys ...string) {
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	for _, k := range keys {
 		delete(l.attributes, k)
 	}
-	l.mu.Unlock()
 }
 
 func std(level string, v ...any) {

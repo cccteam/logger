@@ -194,8 +194,8 @@ func (l *gcpLogger) AddRequestAttribute(key string, value any) error {
 	}
 
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.attributes[key] = value
-	l.mu.Unlock()
 
 	return nil
 }
@@ -204,10 +204,10 @@ func (l *gcpLogger) AddRequestAttribute(key string, value any) error {
 // If a key does not exist, it is ignored
 func (l *gcpLogger) RemoveAttributes(keys ...string) {
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	for _, k := range keys {
 		delete(l.attributes, k)
 	}
-	l.mu.Unlock()
 }
 
 func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, p any) {
