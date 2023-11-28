@@ -53,13 +53,15 @@ func (l *stdErrLogger) Errorf(_ context.Context, format string, v ...any) {
 
 // AddRequestAttribute adds an attribute (key, value) for the parent request log
 // If the key already exists, its value is overwritten
-func (l *stdErrLogger) AddRequestAttribute(key string, value any) {
+func (l *stdErrLogger) AddRequestAttribute(key string, value any) error {
 	l.mu.Lock()
 	if l.attributes == nil {
 		l.attributes = make(map[string]any)
 	}
 	l.attributes[key] = value
 	l.mu.Unlock()
+
+	return nil
 }
 
 // RemoveAttributes removes attributes from the logger

@@ -5,11 +5,19 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"cloud.google.com/go/logging"
+	"github.com/go-playground/errors/v5"
+)
+
+const (
+	cslReqSize  = "requestSize"
+	cslRespSize = "responseSize"
+	cslLogCount = "logCount"
 )
 
 type color int
@@ -72,7 +80,9 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		maxSeverity = logging.Error
 	}
 
-	msg := fmt.Sprintf("%s %s %d %s requestSize=%d responseSize=%d logCount=%d", r.Method, r.URL.Path, sw.Status(), time.Since(begin), requestSize(r.Header.Get("Content-Length")), sw.length, logCount)
+	msg := fmt.Sprintf("%s %s %d %s %s=%d %s=%d %s=%d", r.Method, r.URL.Path, sw.Status(), time.Since(begin),
+		cslReqSize, requestSize(r.Header.Get("Content-Length")), cslRespSize, sw.length, cslLogCount, logCount,
+	)
 	for k, v := range attributes {
 		msg += fmt.Sprintf(" %s=%v", k, v)
 	}
@@ -80,20 +90,22 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type consoleLogger struct {
-	r           *http.Request
-	noColor     bool
-	mu          sync.Mutex
-	maxSeverity logging.Severity
-	logCount    int
-	attributes  map[string]any
+	r            *http.Request
+	noColor      bool
+	reservedKeys []string
+	mu           sync.Mutex
+	maxSeverity  logging.Severity
+	logCount     int
+	attributes   map[string]any
 }
 
 // newConsoleLogger logs all output to console
 func newConsoleLogger(r *http.Request, noColor bool) *consoleLogger {
 	return &consoleLogger{
 		r: r, noColor: noColor,
-		maxSeverity: logging.Debug,
-		attributes:  make(map[string]any),
+		reservedKeys: []string{cslReqSize, cslRespSize, cslLogCount},
+		maxSeverity:  logging.Debug,
+		attributes:   make(map[string]any),
 	}
 }
 
@@ -139,10 +151,16 @@ func (l *consoleLogger) Errorf(_ context.Context, format string, v ...any) {
 
 // AddRequestAttribute adds an attribute (key, value) for the parent request log
 // If the key already exists, its value is overwritten
-func (l *consoleLogger) AddRequestAttribute(key string, value any) {
+func (l *consoleLogger) AddRequestAttribute(key string, value any) error {
+	if slices.Contains(l.reservedKeys, key) {
+		return errors.Newf("'%s' is a reserved key", key)
+	}
+
 	l.mu.Lock()
 	l.attributes[key] = value
 	l.mu.Unlock()
+
+	return nil
 }
 
 // RemoveAttributes removes attributes from the logger

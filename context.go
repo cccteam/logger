@@ -58,7 +58,7 @@ type ctxLogger interface {
 	// Errorf logs an error message with format.
 	Errorf(ctx context.Context, format string, v ...any)
 	// AddRequestAttribute adds an attribute (key, value) for the parent request log. If the key already exists, its value is overwritten
-	AddRequestAttribute(key string, value any)
+	AddRequestAttribute(key string, value any) error
 	// RemoveAttributes removes attributes from the logger. If a key does not exist, it is ignored
 	RemoveAttributes(keys ...string)
 }

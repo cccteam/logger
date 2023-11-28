@@ -12,6 +12,8 @@ package logger
 import (
 	"context"
 	"net/http"
+
+	"github.com/go-playground/errors/v5"
 )
 
 const parentLogEntry = "Parent Log Entry"
@@ -81,8 +83,12 @@ func (l *Logger) Errorf(format string, v ...any) {
 }
 
 // AddRequestAttribute adds an attribute (key, value) for the parent request log. If the key already exists, its value is overwritten
-func (l *Logger) AddRequestAttribute(key string, value any) {
-	l.lg.AddRequestAttribute(key, value)
+func (l *Logger) AddRequestAttribute(key string, value any) error {
+	if err := l.lg.AddRequestAttribute(key, value); err != nil {
+		return errors.Wrapf(err, "failed to add request attribute '%s'", key)
+	}
+
+	return nil
 }
 
 // RemoveAttributes removes attributes from the logger

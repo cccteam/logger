@@ -6,10 +6,18 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
+	"github.com/go-playground/errors/v5"
 	"go.opentelemetry.io/otel/trace"
+)
+
+const (
+	awsTraceIDKey     = "trace_id"
+	awsSpanIDKey      = "span_id"
+	awsHTTPElapsedKey = "http.elapsed"
 )
 
 // AWSExporter is an Exporter that logs to stdout in JSON format to be sent to cloudwatch
@@ -71,9 +79,9 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sc := trace.SpanFromContext(r.Context()).SpanContext()
 
 	logAttr := []slog.Attr{
-		slog.Any("trace_id", xrayTraceID),
-		slog.Any("span_id", sc.SpanID().String()),
-		slog.String("http.elapsed", time.Since(begin).String()),
+		slog.Any(awsTraceIDKey, xrayTraceID),
+		slog.Any(awsSpanIDKey, sc.SpanID().String()),
+		slog.String(awsHTTPElapsedKey, time.Since(begin).String()),
 	}
 	for k, v := range attributes {
 		logAttr = append(logAttr, slog.Any(k, v))
@@ -84,19 +92,21 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type awsLogger struct {
-	logger     awslog
-	traceID    string
-	mu         sync.Mutex
-	maxLevel   slog.Level
-	logCount   int
-	attributes map[string]any
+	logger       awslog
+	traceID      string
+	reservedKeys []string
+	mu           sync.Mutex
+	maxLevel     slog.Level
+	logCount     int
+	attributes   map[string]any
 }
 
 func newAWSLogger(logger awslog, traceID string) *awsLogger {
 	return &awsLogger{
-		logger:     logger,
-		traceID:    traceID,
-		attributes: make(map[string]any),
+		logger:       logger,
+		traceID:      traceID,
+		reservedKeys: []string{awsTraceIDKey, awsSpanIDKey, awsHTTPElapsedKey},
+		attributes:   make(map[string]any),
 	}
 }
 
@@ -146,10 +156,16 @@ func (l *awsLogger) Errorf(ctx context.Context, format string, v ...any) {
 
 // AddRequestAttribute adds an attribute (key, value) for the parent request log
 // If the key already exists, its value is overwritten
-func (l *awsLogger) AddRequestAttribute(key string, value any) {
+func (l *awsLogger) AddRequestAttribute(key string, value any) error {
+	if slices.Contains(l.reservedKeys, key) {
+		return errors.Newf("'%s' is a reserved key", key)
+	}
+
 	l.mu.Lock()
 	l.attributes[key] = value
 	l.mu.Unlock()
+
+	return nil
 }
 
 // RemoveAttributes removes attributes from the logger

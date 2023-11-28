@@ -9,8 +9,11 @@ import (
 
 	"cloud.google.com/go/logging"
 	"contrib.go.opencensus.io/exporter/stackdriver/propagation"
+	"github.com/go-playground/errors/v5"
 	"go.opentelemetry.io/otel/trace"
 )
+
+const gcpMessageKey = "message"
 
 // GoogleCloudExporter implements exporting to Google Cloud Logging
 type GoogleCloudExporter struct {
@@ -85,10 +88,7 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	sc := trace.SpanFromContext(r.Context()).SpanContext()
 
-	msg := parentLogEntry
-	for k, v := range attributes {
-		msg += fmt.Sprintf(", %s: %v", k, v)
-	}
+	attributes[gcpMessageKey] = parentLogEntry
 
 	g.parentLogger.Log(logging.Entry{
 		Timestamp:    begin,
@@ -96,9 +96,7 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Trace:        traceID,
 		SpanID:       sc.SpanID().String(),
 		TraceSampled: sc.IsSampled(),
-		Payload: map[string]any{
-			"message": msg,
-		},
+		Payload:      attributes,
 		HTTPRequest: &logging.HTTPRequest{
 			Request:      r,
 			RequestSize:  requestSize(r.Header.Get("Content-Length")),
@@ -190,10 +188,16 @@ func (l *gcpLogger) Errorf(ctx context.Context, format string, v ...any) {
 
 // AddRequestAttribute adds an attribute (key, value) for the parent request log
 // If the key already exists, its value is overwritten
-func (l *gcpLogger) AddRequestAttribute(key string, value any) {
+func (l *gcpLogger) AddRequestAttribute(key string, value any) error {
+	if key == gcpMessageKey {
+		return errors.Newf("'%s' is a reserved key", gcpMessageKey)
+	}
+
 	l.mu.Lock()
 	l.attributes[key] = value
 	l.mu.Unlock()
+
+	return nil
 }
 
 // RemoveAttributes removes attributes from the logger
@@ -223,7 +227,7 @@ func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, p any) {
 	l.lg.Log(
 		logging.Entry{
 			Payload: map[string]any{
-				"message": p,
+				gcpMessageKey: p,
 			},
 			Severity:     severity,
 			Trace:        l.traceID,
