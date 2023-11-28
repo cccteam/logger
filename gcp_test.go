@@ -407,8 +407,9 @@ func Test_newGCPLogger(t *testing.T) {
 				traceID: "hello",
 			},
 			want: &gcpLogger{
-				lg:      &logging.Logger{},
-				traceID: "hello",
+				lg:         &logging.Logger{},
+				traceID:    "hello",
+				attributes: map[string]any{},
 			},
 		},
 	}

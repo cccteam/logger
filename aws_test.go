@@ -306,8 +306,10 @@ func Test_newAWSLogger(t *testing.T) {
 				traceID: "1234567890",
 			},
 			want: &awsLogger{
-				logger:  &testSlogger{},
-				traceID: "1234567890",
+				logger:       &testSlogger{},
+				traceID:      "1234567890",
+				reservedKeys: []string{"trace_id", "span_id", "http.elapsed"},
+				attributes:   map[string]any{},
 			},
 		},
 	}

@@ -187,7 +187,13 @@ func TestNewConsoleLogger(t *testing.T) {
 				r:       &http.Request{},
 				noColor: true,
 			},
-			want: &consoleLogger{r: &http.Request{}, noColor: true, maxSeverity: logging.Debug},
+			want: &consoleLogger{
+				r:            &http.Request{},
+				noColor:      true,
+				maxSeverity:  logging.Debug,
+				reservedKeys: []string{"requestSize", "responseSize", "logCount"},
+				attributes:   map[string]any{},
+			},
 		},
 	}
 	for _, tt := range tests {
