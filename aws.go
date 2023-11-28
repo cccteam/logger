@@ -15,9 +15,17 @@ import (
 )
 
 const (
-	awsTraceIDKey     = "trace_id"
-	awsSpanIDKey      = "span_id"
-	awsHTTPElapsedKey = "http.elapsed"
+	awsTraceIDKey        = "trace_id"
+	awsSpanIDKey         = "span_id"
+	awsHTTPElapsedKey    = "http.elapsed"
+	awsHTTPMethodKey     = "http.method"
+	awsHTTPURLKey        = "http.url"
+	awsHTTPStatusCodeKey = "http.status_code"
+	awsHTTPRespLengthKey = "http.response.length"
+	awsHTTPUserAgentKey  = "http.user_agent"
+	awsHTTPRemoteIPKey   = "http.remote_ip"
+	awsHTTPSchemeKey     = "http.scheme"
+	awsHTTPProtoKey      = "http.proto"
 )
 
 // AWSExporter is an Exporter that logs to stdout in JSON format to be sent to cloudwatch
@@ -83,11 +91,11 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.Any(awsSpanIDKey, sc.SpanID().String()),
 		slog.String(awsHTTPElapsedKey, time.Since(begin).String()),
 	}
+	logAttr = append(logAttr, httpAttributes(r, sw)...)
 	for k, v := range attributes {
 		logAttr = append(logAttr, slog.Any(k, v))
 	}
 
-	logAttr = append(logAttr, httpAttributes(r, sw)...)
 	h.logger.LogAttrs(r.Context(), maxLevel, parentLogEntry, logAttr...)
 }
 
@@ -105,7 +113,7 @@ func newAWSLogger(logger awslog, traceID string) *awsLogger {
 	return &awsLogger{
 		logger:       logger,
 		traceID:      traceID,
-		reservedKeys: []string{awsTraceIDKey, awsSpanIDKey, awsHTTPElapsedKey},
+		reservedKeys: []string{awsTraceIDKey, awsSpanIDKey, awsHTTPElapsedKey, awsHTTPMethodKey, awsHTTPURLKey, awsHTTPStatusCodeKey, awsHTTPRespLengthKey, awsHTTPUserAgentKey, awsHTTPRemoteIPKey, awsHTTPSchemeKey, awsHTTPProtoKey},
 		attributes:   make(map[string]any),
 	}
 }
@@ -188,8 +196,8 @@ func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
 
 	span := trace.SpanFromContext(ctx)
 	attr := []slog.Attr{
-		slog.String("trace_id", l.traceID),
-		slog.String("span_id", span.SpanContext().SpanID().String()),
+		slog.String(awsTraceIDKey, l.traceID),
+		slog.String(awsSpanIDKey, span.SpanContext().SpanID().String()),
 	}
 	l.logger.LogAttrs(ctx, level, message, attr...)
 }
@@ -197,14 +205,14 @@ func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
 // httpAttributes returns a slice of slog.Attr for the http request and response
 func httpAttributes(r *http.Request, sw *statusWriter) []slog.Attr {
 	return []slog.Attr{
-		slog.String("http.method", r.Method),
-		slog.String("http.url", r.URL.String()),
-		slog.Int("http.status_code", sw.Status()),
-		slog.Int64("http.response.length", sw.length),
-		slog.String("http.user_agent", r.UserAgent()),
-		slog.String("http.remote_ip", r.RemoteAddr),
-		slog.String("http.scheme", r.URL.Scheme),
-		slog.String("http.proto", r.Proto),
+		slog.String(awsHTTPMethodKey, r.Method),
+		slog.String(awsHTTPURLKey, r.URL.String()),
+		slog.Int(awsHTTPStatusCodeKey, sw.Status()),
+		slog.Int64(awsHTTPRespLengthKey, sw.length),
+		slog.String(awsHTTPUserAgentKey, r.UserAgent()),
+		slog.String(awsHTTPRemoteIPKey, r.RemoteAddr),
+		slog.String(awsHTTPSchemeKey, r.URL.Scheme),
+		slog.String(awsHTTPProtoKey, r.Proto),
 	}
 }
 
