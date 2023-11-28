@@ -29,7 +29,7 @@ const (
 	gray   color = 37
 )
 
-// ConsoleExporter implements exporting to Google Cloud Logging
+// ConsoleExporter implements exporting to the console
 type ConsoleExporter struct {
 	noColor bool
 }
@@ -46,7 +46,7 @@ func (e *ConsoleExporter) NoColor(v bool) *ConsoleExporter {
 	return e
 }
 
-// Middleware returns a middleware that exports logs to Google Cloud Logging
+// Middleware returns a middleware that exports logs to the console
 func (e *ConsoleExporter) Middleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return &consoleHandler{
