@@ -99,7 +99,7 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type awsLogger struct {
-	parent        *awsLogger
+	root          *awsLogger
 	logger        awslog
 	traceID       string
 	rsvdKeys      []string
@@ -123,13 +123,26 @@ func newAWSLogger(logger awslog, traceID string) *awsLogger {
 		reqAttributes: make(map[string]any),
 		attributes:    make(map[string]any),
 	}
-	l.parent = l
+	l.root = l // root is self
 
 	return l
 }
 
 type awslog interface {
 	LogAttrs(ctx context.Context, level slog.Level, msg string, attrs ...slog.Attr)
+}
+
+// newChild returns a new child awsLogger
+func (l *awsLogger) newChild() *awsLogger {
+	return &awsLogger{
+		root:          l.root,
+		logger:        l.logger,
+		traceID:       l.traceID,
+		rsvdKeys:      l.rsvdKeys,
+		rsvdReqKeys:   l.rsvdReqKeys,
+		reqAttributes: make(map[string]any),
+		attributes:    make(map[string]any),
+	}
 }
 
 // Debug logs a debug message.
@@ -203,12 +216,12 @@ func (l *awsLogger) WithAttribute(key string, value any) attributer {
 }
 
 func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
-	l.parent.mu.Lock()
-	if l.parent.maxLevel < level {
-		l.parent.maxLevel = level
+	l.root.mu.Lock()
+	if l.root.maxLevel < level {
+		l.root.maxLevel = level
 	}
-	l.parent.logCount++
-	l.parent.mu.Unlock()
+	l.root.logCount++
+	l.root.mu.Unlock()
 
 	span := trace.SpanFromContext(ctx)
 	attr := []slog.Attr{
@@ -239,8 +252,7 @@ func (a *awsAttributer) AddAttribute(key string, value any) {
 
 // Logger returns a ctxLogger with the child (trace) attributes embedded
 func (a *awsAttributer) Logger() ctxLogger {
-	l := newAWSLogger(a.logger.logger, a.logger.traceID)
-	l.parent = a.logger.parent
+	l := a.logger.newChild()
 	for k, v := range a.attributes {
 		l.attributes[k] = v
 	}

@@ -89,7 +89,7 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type consoleLogger struct {
-	parent        *consoleLogger
+	root          *consoleLogger
 	r             *http.Request
 	noColor       bool
 	rsvdReqKeys   []string
@@ -109,9 +109,22 @@ func newConsoleLogger(r *http.Request, noColor bool) *consoleLogger {
 		reqAttributes: make(map[string]any),
 		attributes:    make(map[string]any),
 	}
-	l.parent = l
+	l.root = l // root is self
 
 	return l
+}
+
+// newChild returns a new child consoleLogger
+func (l *consoleLogger) newChild() *consoleLogger {
+	return &consoleLogger{
+		root:          l.root,
+		r:             l.r,
+		noColor:       l.noColor,
+		rsvdReqKeys:   l.rsvdReqKeys,
+		maxSeverity:   logging.Debug,
+		reqAttributes: make(map[string]any),
+		attributes:    make(map[string]any),
+	}
 }
 
 // Debug logs a debug message.
@@ -188,12 +201,12 @@ func (l *consoleLogger) console(level logging.Severity, c color, msg string) {
 }
 
 func (l *consoleLogger) colorPrint(level logging.Severity, c color) string {
-	l.parent.mu.Lock()
-	if l.parent.maxSeverity < level {
-		l.parent.maxSeverity = level
+	l.root.mu.Lock()
+	if l.root.maxSeverity < level {
+		l.root.maxSeverity = level
 	}
-	l.parent.logCount++
-	l.parent.mu.Unlock()
+	l.root.logCount++
+	l.root.mu.Unlock()
 
 	strLevel := strings.ToUpper(level.String())
 	if level == logging.Warning {
@@ -220,8 +233,7 @@ func (a *consoleAttributer) AddAttribute(key string, value any) {
 
 // Logger returns a ctxLogger with the child (trace) attributes embedded
 func (a *consoleAttributer) Logger() ctxLogger {
-	l := newConsoleLogger(a.logger.r, a.logger.noColor)
-	l.parent = a.logger.parent
+	l := a.logger.newChild()
 	for k, v := range a.attributes {
 		l.attributes[k] = v
 	}

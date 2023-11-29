@@ -408,6 +408,7 @@ func Test_newGCPLogger(t *testing.T) {
 			want: &gcpLogger{
 				logger:        &logging.Logger{},
 				traceID:       "hello",
+				rsvdKeys:      []string{"message"},
 				reqAttributes: map[string]any{},
 				attributes:    map[string]any{},
 			},
@@ -418,11 +419,11 @@ func Test_newGCPLogger(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := newGCPLogger(tt.args.lg, tt.args.traceID)
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(gcpLogger{}), cmpopts.IgnoreFields(gcpLogger{}, "logger", "mu", "parent")); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(gcpLogger{}), cmpopts.IgnoreFields(gcpLogger{}, "logger", "mu", "root")); diff != "" {
 				t.Errorf("newGCPLogger() mismatch (-want +got):\n%s", diff)
 			}
-			if got.parent != got {
-				t.Errorf("newGCPLogger().parent is not self")
+			if got.root != got {
+				t.Errorf("newGCPLogger().root is not self")
 			}
 		})
 	}
@@ -494,7 +495,7 @@ func Test_gcpLogger(t *testing.T) {
 					buf: &buf,
 				},
 			}
-			l.parent = l
+			l.root = l
 
 			l.Debug(ctx, tt.args.v2)
 			if s := buf.String(); s != tt.wantDebug {

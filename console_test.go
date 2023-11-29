@@ -202,11 +202,11 @@ func TestNewConsoleLogger(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := newConsoleLogger(tt.args.r, tt.args.noColor)
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(consoleLogger{}), cmpopts.IgnoreFields(consoleLogger{}, "r", "mu", "parent")); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(consoleLogger{}), cmpopts.IgnoreFields(consoleLogger{}, "r", "mu", "root")); diff != "" {
 				t.Errorf("NewConsoleLogger() mismatch (-want +got):\n%s", diff)
 			}
-			if got.parent != got {
-				t.Errorf("NewConsoleLogger().parent is not self")
+			if got.root != got {
+				t.Errorf("NewConsoleLogger().root is not self")
 			}
 		})
 	}
@@ -254,7 +254,7 @@ func Test_consoleLogger(t *testing.T) {
 
 			u, _ := url.Parse("http://some.domain.com/path")
 			l := &consoleLogger{r: &http.Request{Method: http.MethodGet, URL: u}, noColor: tt.args.noColor}
-			l.parent = l
+			l.root = l
 			format := "Formatted %s"
 
 			l.Debug(ctx, tt.args.v2)

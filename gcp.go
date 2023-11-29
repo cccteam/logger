@@ -133,7 +133,7 @@ type logger interface {
 }
 
 type gcpLogger struct {
-	parent        *gcpLogger
+	root          *gcpLogger
 	logger        logger
 	traceID       string
 	rsvdKeys      []string
@@ -152,9 +152,21 @@ func newGCPLogger(lg logger, traceID string) *gcpLogger {
 		reqAttributes: make(map[string]any),
 		attributes:    make(map[string]any),
 	}
-	l.parent = l
+	l.root = l // root is self
 
 	return l
+}
+
+// newChild returns a new child gcpLogger
+func (l *gcpLogger) newChild() *gcpLogger {
+	return &gcpLogger{
+		root:          l.root,
+		logger:        l.logger,
+		traceID:       l.traceID,
+		rsvdKeys:      l.rsvdKeys,
+		reqAttributes: make(map[string]any),
+		attributes:    make(map[string]any),
+	}
 }
 
 // Debug logs a debug message.
@@ -228,12 +240,12 @@ func (l *gcpLogger) WithAttribute(key string, value any) attributer {
 }
 
 func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, msg any) {
-	l.parent.mu.Lock()
-	if l.parent.maxSeverity < severity {
-		l.parent.maxSeverity = severity
+	l.root.mu.Lock()
+	if l.root.maxSeverity < severity {
+		l.root.maxSeverity = severity
 	}
-	l.parent.logCount++
-	l.parent.mu.Unlock()
+	l.root.logCount++
+	l.root.mu.Unlock()
 
 	if err, ok := msg.(error); ok {
 		msg = err.Error()
@@ -275,8 +287,7 @@ func (a *gcpAttributer) AddAttribute(key string, value any) {
 
 // Logger returns a ctxLogger with the child (trace) attributes embedded
 func (a *gcpAttributer) Logger() ctxLogger {
-	l := newGCPLogger(a.logger.logger, a.logger.traceID)
-	l.parent = a.logger.parent
+	l := a.logger.newChild()
 	for k, v := range a.attributes {
 		l.attributes[k] = v
 	}

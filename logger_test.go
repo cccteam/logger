@@ -69,7 +69,7 @@ func TestLogger(t *testing.T) {
 					buf: &buf,
 				},
 			}
-			logger.parent = logger
+			logger.root = logger
 			ctx := newContext(context.Background(), logger)
 
 			r := &http.Request{}

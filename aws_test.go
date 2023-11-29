@@ -321,11 +321,11 @@ func Test_newAWSLogger(t *testing.T) {
 			t.Parallel()
 
 			got := newAWSLogger(tt.args.logger, tt.args.traceID)
-			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreFields(awsLogger{}, "logger", "mu", "parent"), cmp.AllowUnexported(awsLogger{})); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreFields(awsLogger{}, "logger", "mu", "root"), cmp.AllowUnexported(awsLogger{})); diff != "" {
 				t.Errorf("newAWSLogger() mismatch (-want +got):\n%s", diff)
 			}
-			if got.parent != got {
-				t.Errorf("newAWSLogger().parent is not self")
+			if got.root != got {
+				t.Errorf("newAWSLogger().root is not self")
 			}
 		})
 	}
@@ -397,7 +397,7 @@ func Test_awsLogger(t *testing.T) {
 					buf: &buf,
 				},
 			}
-			l.parent = l
+			l.root = l
 
 			l.Debug(ctx, tt.args.v2)
 			if s := buf.String(); s != tt.wantDebug {
