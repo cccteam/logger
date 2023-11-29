@@ -63,7 +63,7 @@ type ctxLogger interface {
 	// If the key already exists, its value is overwritten
 	AddRequestAttribute(key string, value any)
 
-	// WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
+	// WithAttribute returns an attributer with the provided kv embedded as a child (trace) log attribute
 	// If the key matches a reserved key, it will be prefixed with "custom_"
 	// If the key already exists, its value is overwritten
 	WithAttribute(key string, value any) attributer
@@ -71,7 +71,7 @@ type ctxLogger interface {
 
 // attributer defines the interface for adding attributes for child (trace) logs
 type attributer interface {
-	// AddAttribute adds an attribute (kv) for the child (trace) log.
+	// AddAttribute adds an attribute (kv) for the child (trace) log
 	// If the key matches a reserved key, it will be prefixed with "custom_"
 	// If the key already exists, its value is overwritten
 	AddAttribute(key string, value any)

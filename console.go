@@ -180,7 +180,7 @@ func (l *consoleLogger) AddRequestAttribute(key string, value any) {
 	l.reqAttributes[key] = value
 }
 
-// WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
+// WithAttribute returns an attributer with the provided kv embedded as a child (trace) log attribute
 // If the key already exists, its value is overwritten
 func (l *consoleLogger) WithAttribute(key string, value any) attributer {
 	attrs := make(map[string]any)

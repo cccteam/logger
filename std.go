@@ -59,7 +59,7 @@ func (l *stdErrLogger) Errorf(_ context.Context, format string, v ...any) {
 // For this std logger, there is no parent request log, so this is a no-op
 func (l *stdErrLogger) AddRequestAttribute(_ string, _ any) {}
 
-// WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
+// WithAttribute returns an attributer with the provided kv embedded as a child (trace) log attribute
 // If the key already exists, its value is overwritten
 func (l *stdErrLogger) WithAttribute(key string, value any) attributer {
 	attrs := make(map[string]any)

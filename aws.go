@@ -198,7 +198,7 @@ func (l *awsLogger) AddRequestAttribute(key string, value any) {
 	l.reqAttributes[key] = value
 }
 
-// WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
+// WithAttribute returns an attributer with the provided kv embedded as a child (trace) log attribute
 // If the key matches a reserved key, it will be prefixed with "custom_"
 // If the key already exists, its value is overwritten
 func (l *awsLogger) WithAttribute(key string, value any) attributer {
