@@ -105,18 +105,18 @@ type AttributerLogger struct {
 }
 
 // AddAttribute adds an attribute (kv) for the child (trace) log. If the key already exists, its value is overwritten
-func (l *AttributerLogger) AddAttribute(key string, value any) error {
-	if err := l.attributer.AddAttribute(key, value); err != nil {
-		return errors.Wrapf(err, "failed to add attribute '%s'", key)
+func (a *AttributerLogger) AddAttribute(key string, value any) (*AttributerLogger, error) {
+	if err := a.attributer.AddAttribute(key, value); err != nil {
+		return nil, errors.Wrapf(err, "failed to add attribute '%s'", key)
 	}
 
-	return nil
+	return a, nil
 }
 
 // Logger returns a Logger with the child (trace) attributes embedded
-func (l *AttributerLogger) Logger() *Logger {
+func (a *AttributerLogger) Logger() *Logger {
 	return &Logger{
-		ctx: l.logger.ctx,
-		lg:  l.attributer.Logger(),
+		ctx: a.logger.ctx,
+		lg:  a.attributer.Logger(),
 	}
 }
