@@ -57,16 +57,24 @@ type ctxLogger interface {
 	Error(ctx context.Context, v any)
 	// Errorf logs an error message with format.
 	Errorf(ctx context.Context, format string, v ...any)
-	// AddRequestAttribute adds an attribute (kv) for the parent request log. If the key already exists, its value is overwritten
-	AddRequestAttribute(key string, value any) error
+
+	// AddRequestAttribute adds an attribute (kv) for the parent request log
+	// If the key matches a reserved key, it will be prefixed with "custom_"
+	// If the key already exists, its value is overwritten
+	AddRequestAttribute(key string, value any)
+
 	// WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
+	// If the key matches a reserved key, it will be prefixed with "custom_"
+	// If the key already exists, its value is overwritten
 	WithAttribute(key string, value any) attributer
 }
 
 // attributer defines the interface for adding attributes for child (trace) logs
 type attributer interface {
-	// AddAttribute adds an attribute (kv) for the child (trace) log. If the key already exists, its value is overwritten
-	AddAttribute(key string, value any) error
+	// AddAttribute adds an attribute (kv) for the child (trace) log.
+	// If the key matches a reserved key, it will be prefixed with "custom_"
+	// If the key already exists, its value is overwritten
+	AddAttribute(key string, value any)
 
 	// Logger returns a ctxLogger with the child (trace) attributes embedded
 	Logger() ctxLogger

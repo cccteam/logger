@@ -308,7 +308,8 @@ func Test_newAWSLogger(t *testing.T) {
 			want: &awsLogger{
 				logger:        &testSlogger{},
 				traceID:       "1234567890",
-				reservedKeys:  []string{"trace_id", "span_id", "http.elapsed", "http.method", "http.url", "http.status_code", "http.response.length", "http.user_agent", "http.remote_ip", "http.scheme", "http.proto"},
+				rsvdKeys:      []string{"trace_id", "span_id"},
+				rsvdReqKeys:   []string{"trace_id", "span_id", "http.elapsed", "http.method", "http.url", "http.status_code", "http.response.length", "http.user_agent", "http.remote_ip", "http.scheme", "http.proto"},
 				reqAttributes: map[string]any{},
 				attributes:    map[string]any{},
 			},

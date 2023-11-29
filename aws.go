@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-playground/errors/v5"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -103,7 +102,8 @@ type awsLogger struct {
 	parent        *awsLogger
 	logger        awslog
 	traceID       string
-	reservedKeys  []string
+	rsvdKeys      []string
+	rsvdReqKeys   []string
 	attributes    map[string]any // attributes for child (trace) logs
 	mu            sync.Mutex
 	maxLevel      slog.Level
@@ -113,11 +113,12 @@ type awsLogger struct {
 
 func newAWSLogger(logger awslog, traceID string) *awsLogger {
 	l := &awsLogger{
-		logger:  logger,
-		traceID: traceID,
-		reservedKeys: []string{
-			awsTraceIDKey, awsSpanIDKey, awsHTTPElapsedKey, awsHTTPMethodKey, awsHTTPURLKey, awsHTTPStatusCodeKey,
-			awsHTTPRespLengthKey, awsHTTPUserAgentKey, awsHTTPRemoteIPKey, awsHTTPSchemeKey, awsHTTPProtoKey,
+		logger:   logger,
+		traceID:  traceID,
+		rsvdKeys: []string{awsTraceIDKey, awsSpanIDKey},
+		rsvdReqKeys: []string{
+			awsTraceIDKey, awsSpanIDKey,
+			awsHTTPElapsedKey, awsHTTPMethodKey, awsHTTPURLKey, awsHTTPStatusCodeKey, awsHTTPRespLengthKey, awsHTTPUserAgentKey, awsHTTPRemoteIPKey, awsHTTPSchemeKey, awsHTTPProtoKey,
 		},
 		reqAttributes: make(map[string]any),
 		attributes:    make(map[string]any),
@@ -172,21 +173,26 @@ func (l *awsLogger) Errorf(ctx context.Context, format string, v ...any) {
 }
 
 // AddRequestAttribute adds an attribute (key, value) for the parent request log
+// If the key matches a reserved key, it will be prefixed with "custom_"
 // If the key already exists, its value is overwritten
-func (l *awsLogger) AddRequestAttribute(key string, value any) error {
-	if slices.Contains(l.reservedKeys, key) {
-		return errors.Newf("'%s' is a reserved key", key)
+func (l *awsLogger) AddRequestAttribute(key string, value any) {
+	if slices.Contains(l.rsvdReqKeys, key) {
+		key = customPrefix + key
 	}
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.reqAttributes[key] = value
-
-	return nil
 }
 
 // WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
+// If the key matches a reserved key, it will be prefixed with "custom_"
+// If the key already exists, its value is overwritten
 func (l *awsLogger) WithAttribute(key string, value any) attributer {
+	if slices.Contains(l.rsvdKeys, key) {
+		key = customPrefix + key
+	}
+
 	attrs := make(map[string]any)
 	for k, v := range l.attributes {
 		attrs[k] = v
@@ -221,15 +227,14 @@ type awsAttributer struct {
 }
 
 // AddAttribute adds an attribute (key, value) for the child (trace) log
+// If the key matches a reserved key, it will be prefixed with "custom_"
 // If the key already exists, its value is overwritten
-func (a *awsAttributer) AddAttribute(key string, value any) error {
-	if slices.Contains(a.logger.reservedKeys, key) {
-		return errors.Newf("'%s' is a reserved key", key)
+func (a *awsAttributer) AddAttribute(key string, value any) {
+	if slices.Contains(a.logger.rsvdKeys, key) {
+		key = customPrefix + key
 	}
 
 	a.attributes[key] = value
-
-	return nil
 }
 
 // Logger returns a ctxLogger with the child (trace) attributes embedded

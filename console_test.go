@@ -191,7 +191,7 @@ func TestNewConsoleLogger(t *testing.T) {
 				r:             &http.Request{},
 				noColor:       true,
 				maxSeverity:   logging.Debug,
-				reservedKeys:  []string{"requestSize", "responseSize", "logCount"},
+				rsvdReqKeys:   []string{"requestSize", "responseSize", "logCount"},
 				reqAttributes: map[string]any{},
 				attributes:    map[string]any{},
 			},

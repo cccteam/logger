@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
 	"cloud.google.com/go/logging"
 	"contrib.go.opencensus.io/exporter/stackdriver/propagation"
-	"github.com/go-playground/errors/v5"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -136,6 +136,7 @@ type gcpLogger struct {
 	parent        *gcpLogger
 	logger        logger
 	traceID       string
+	rsvdKeys      []string
 	attributes    map[string]any // attributes for child (trace) logs
 	mu            sync.Mutex
 	maxSeverity   logging.Severity
@@ -147,6 +148,7 @@ func newGCPLogger(lg logger, traceID string) *gcpLogger {
 	l := &gcpLogger{
 		logger:        lg,
 		traceID:       traceID,
+		rsvdKeys:      []string{gcpMessageKey},
 		reqAttributes: make(map[string]any),
 		attributes:    make(map[string]any),
 	}
@@ -196,21 +198,26 @@ func (l *gcpLogger) Errorf(ctx context.Context, format string, v ...any) {
 }
 
 // AddRequestAttribute adds an attribute (key, value) for the parent request log
+// If the key matches a reserved key, it will be prefixed with "custom_"
 // If the key already exists, its value is overwritten
-func (l *gcpLogger) AddRequestAttribute(key string, value any) error {
-	if key == gcpMessageKey {
-		return errors.Newf("'%s' is a reserved key", gcpMessageKey)
+func (l *gcpLogger) AddRequestAttribute(key string, value any) {
+	if slices.Contains(l.rsvdKeys, key) {
+		key = customPrefix + key
 	}
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.reqAttributes[key] = value
-
-	return nil
 }
 
 // WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
+// If the key matches a reserved key, it will be prefixed with "custom_"
+// If the key already exists, its value is overwritten
 func (l *gcpLogger) WithAttribute(key string, value any) attributer {
+	if slices.Contains(l.rsvdKeys, key) {
+		key = customPrefix + key
+	}
+
 	attrs := make(map[string]any)
 	for k, v := range l.attributes {
 		attrs[k] = v
@@ -256,15 +263,14 @@ type gcpAttributer struct {
 }
 
 // AddAttribute adds an attribute (key, value) for the child (trace) log
+// If the key matches a reserved key, it will be prefixed with "custom_"
 // If the key already exists, its value is overwritten
-func (a *gcpAttributer) AddAttribute(key string, value any) error {
-	if key == gcpMessageKey {
-		return errors.Newf("'%s' is a reserved key", key)
+func (a *gcpAttributer) AddAttribute(key string, value any) {
+	if slices.Contains(a.logger.rsvdKeys, key) {
+		key = customPrefix + key
 	}
 
 	a.attributes[key] = value
-
-	return nil
 }
 
 // Logger returns a ctxLogger with the child (trace) attributes embedded

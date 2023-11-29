@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/logging"
-	"github.com/go-playground/errors/v5"
 )
 
 const (
@@ -93,7 +92,7 @@ type consoleLogger struct {
 	parent        *consoleLogger
 	r             *http.Request
 	noColor       bool
-	reservedKeys  []string
+	rsvdReqKeys   []string
 	attributes    map[string]any // attributes for child (trace) logs
 	mu            sync.Mutex
 	maxSeverity   logging.Severity
@@ -105,7 +104,7 @@ type consoleLogger struct {
 func newConsoleLogger(r *http.Request, noColor bool) *consoleLogger {
 	l := &consoleLogger{
 		r: r, noColor: noColor,
-		reservedKeys:  []string{cslReqSize, cslRespSize, cslLogCount},
+		rsvdReqKeys:   []string{cslReqSize, cslRespSize, cslLogCount},
 		maxSeverity:   logging.Debug,
 		reqAttributes: make(map[string]any),
 		attributes:    make(map[string]any),
@@ -156,20 +155,20 @@ func (l *consoleLogger) Errorf(_ context.Context, format string, v ...any) {
 }
 
 // AddRequestAttribute adds an attribute (key, value) for the parent request log
+// If the key matches a reserved key, it will be prefixed with "custom_"
 // If the key already exists, its value is overwritten
-func (l *consoleLogger) AddRequestAttribute(key string, value any) error {
-	if slices.Contains(l.reservedKeys, key) {
-		return errors.Newf("'%s' is a reserved key", key)
+func (l *consoleLogger) AddRequestAttribute(key string, value any) {
+	if slices.Contains(l.rsvdReqKeys, key) {
+		key = customPrefix + key
 	}
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.reqAttributes[key] = value
-
-	return nil
 }
 
 // WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
+// If the key already exists, its value is overwritten
 func (l *consoleLogger) WithAttribute(key string, value any) attributer {
 	attrs := make(map[string]any)
 	for k, v := range l.attributes {
@@ -215,14 +214,8 @@ type consoleAttributer struct {
 
 // AddAttribute adds an attribute (key, value) for the child (trace) log
 // If the key already exists, its value is overwritten
-func (a *consoleAttributer) AddAttribute(key string, value any) error {
-	if slices.Contains(a.logger.reservedKeys, key) {
-		return errors.Newf("'%s' is a reserved key", key)
-	}
-
+func (a *consoleAttributer) AddAttribute(key string, value any) {
 	a.attributes[key] = value
-
-	return nil
 }
 
 // Logger returns a ctxLogger with the child (trace) attributes embedded
