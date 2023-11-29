@@ -95,3 +95,33 @@ func (l *Logger) AddRequestAttribute(key string, value any) error {
 func (l *Logger) RemoveRequestAttributes(keys ...string) {
 	l.lg.RemoveRequestAttributes(keys...)
 }
+
+// WithAttribute adds the provided kv as a child (trace) log attribute and returns an Attributer for adding additional attributes
+func (l *Logger) WithAttribute(key string, value any) *AttributerLogger {
+	return &AttributerLogger{
+		logger:     l,
+		attributer: l.lg.WithAttribute(key, value),
+	}
+}
+
+type AttributerLogger struct {
+	logger     *Logger
+	attributer attributer
+}
+
+// AddAttribute adds an attribute (kv) for the child (trace) log. If the key already exists, its value is overwritten
+func (l *AttributerLogger) AddAttribute(key string, value any) error {
+	if err := l.attributer.AddAttribute(key, value); err != nil {
+		return errors.Wrapf(err, "failed to add attribute '%s'", key)
+	}
+
+	return nil
+}
+
+// Logger returns a Logger with the child (trace) attributes embedded
+func (l *AttributerLogger) Logger() *Logger {
+	return &Logger{
+		ctx: l.logger.ctx,
+		lg:  l.attributer.Logger(),
+	}
+}

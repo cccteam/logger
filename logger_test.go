@@ -64,11 +64,13 @@ func TestLogger(t *testing.T) {
 			t.Parallel()
 
 			var buf bytes.Buffer
-			ctx := newContext(context.Background(), &gcpLogger{
-				lg: &testLogger{
+			logger := &gcpLogger{
+				logger: &testLogger{
 					buf: &buf,
 				},
-			})
+			}
+			logger.parent = logger
+			ctx := newContext(context.Background(), logger)
 
 			r := &http.Request{}
 			r = r.WithContext(ctx)

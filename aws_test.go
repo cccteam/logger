@@ -306,10 +306,11 @@ func Test_newAWSLogger(t *testing.T) {
 				traceID: "1234567890",
 			},
 			want: &awsLogger{
-				logger:       &testSlogger{},
-				traceID:      "1234567890",
-				reservedKeys: []string{"trace_id", "span_id", "http.elapsed"},
-				attributes:   map[string]any{},
+				logger:        &testSlogger{},
+				traceID:       "1234567890",
+				reservedKeys:  []string{"trace_id", "span_id", "http.elapsed", "http.method", "http.url", "http.status_code", "http.response.length", "http.user_agent", "http.remote_ip", "http.scheme", "http.proto"},
+				reqAttributes: map[string]any{},
+				attributes:    map[string]any{},
 			},
 		},
 	}
@@ -319,8 +320,11 @@ func Test_newAWSLogger(t *testing.T) {
 			t.Parallel()
 
 			got := newAWSLogger(tt.args.logger, tt.args.traceID)
-			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreFields(awsLogger{}, "logger", "mu"), cmp.AllowUnexported(awsLogger{})); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreFields(awsLogger{}, "logger", "mu", "parent"), cmp.AllowUnexported(awsLogger{})); diff != "" {
 				t.Errorf("newAWSLogger() mismatch (-want +got):\n%s", diff)
+			}
+			if got.parent != got {
+				t.Errorf("newAWSLogger().parent is not self")
 			}
 		})
 	}
@@ -392,6 +396,7 @@ func Test_awsLogger(t *testing.T) {
 					buf: &buf,
 				},
 			}
+			l.parent = l
 
 			l.Debug(ctx, tt.args.v2)
 			if s := buf.String(); s != tt.wantDebug {

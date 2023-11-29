@@ -2,49 +2,57 @@ package logger
 
 import (
 	"context"
+	"fmt"
 	"log"
 )
 
-type stdErrLogger struct{}
+type stdErrLogger struct {
+	attributes map[string]any
+}
+
+// newStdErrLogger returns a new stdErrLogger
+func newStdErrLogger() *stdErrLogger {
+	return &stdErrLogger{attributes: map[string]any{}}
+}
 
 // Debug logs a debug message.
 func (l *stdErrLogger) Debug(_ context.Context, v any) {
-	std("DEBUG", v)
+	l.std("DEBUG", fmt.Sprint(v))
 }
 
 // Debugf logs a debug message with format.
 func (l *stdErrLogger) Debugf(_ context.Context, format string, v ...any) {
-	stdf("DEBUG", format, v...)
+	l.std("DEBUG", fmt.Sprintf(format, v...))
 }
 
 // Info logs a info message.
 func (l *stdErrLogger) Info(_ context.Context, v any) {
-	std("INFO ", v)
+	l.std("INFO ", fmt.Sprint(v))
 }
 
 // Infof logs a info message with format.
 func (l *stdErrLogger) Infof(_ context.Context, format string, v ...any) {
-	stdf("INFO ", format, v...)
+	l.std("INFO ", fmt.Sprintf(format, v...))
 }
 
 // Warn logs a warning message.
 func (l *stdErrLogger) Warn(_ context.Context, v any) {
-	std("WARN ", v)
+	l.std("WARN ", fmt.Sprint(v))
 }
 
 // Warnf logs a warning message with format.
 func (l *stdErrLogger) Warnf(_ context.Context, format string, v ...any) {
-	stdf("WARN ", format, v...)
+	l.std("WARN ", fmt.Sprintf(format, v...))
 }
 
 // Error logs an error message.
 func (l *stdErrLogger) Error(_ context.Context, v any) {
-	std("ERROR", v)
+	l.std("ERROR", fmt.Sprint(v))
 }
 
 // Errorf logs an error message with format.
 func (l *stdErrLogger) Errorf(_ context.Context, format string, v ...any) {
-	stdf("ERROR", format, v...)
+	l.std("ERROR", fmt.Sprintf(format, v...))
 }
 
 // AddRequestAttribute adds an attribute (key, value) for the parent request log
@@ -57,10 +65,44 @@ func (l *stdErrLogger) AddRequestAttribute(_ string, _ any) error {
 // For this std logger, there is no parent request log, so this is a no-op
 func (l *stdErrLogger) RemoveRequestAttributes(_ ...string) {}
 
-func std(level string, v ...any) {
-	log.Printf(level+": %s", v...)
+// WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
+func (l *stdErrLogger) WithAttribute(key string, value any) attributer {
+	attrs := make(map[string]any)
+	for k, v := range l.attributes {
+		attrs[k] = v
+	}
+	attrs[key] = value
+
+	return &stdAttributer{logger: l, attributes: attrs}
 }
 
-func stdf(level, format string, v ...any) {
-	log.Printf(level+": "+format, v...)
+func (l *stdErrLogger) std(level, msg string) {
+	for k, v := range l.attributes {
+		msg += fmt.Sprintf(", %s=%v", k, v)
+	}
+
+	log.Printf(level+": %s", msg)
+}
+
+type stdAttributer struct {
+	logger     *stdErrLogger
+	attributes map[string]any
+}
+
+// AddAttribute adds an attribute (key, value) for the child (trace) log
+// If the key already exists, its value is overwritten
+func (a *stdAttributer) AddAttribute(key string, value any) error {
+	a.attributes[key] = value
+
+	return nil
+}
+
+// Logger returns a ctxLogger with the child (trace) attributes embedded
+func (a *stdAttributer) Logger() ctxLogger {
+	l := newStdErrLogger()
+	for k, v := range a.attributes {
+		l.attributes[k] = v
+	}
+
+	return l
 }

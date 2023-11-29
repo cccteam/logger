@@ -188,11 +188,12 @@ func TestNewConsoleLogger(t *testing.T) {
 				noColor: true,
 			},
 			want: &consoleLogger{
-				r:            &http.Request{},
-				noColor:      true,
-				maxSeverity:  logging.Debug,
-				reservedKeys: []string{"requestSize", "responseSize", "logCount"},
-				attributes:   map[string]any{},
+				r:             &http.Request{},
+				noColor:       true,
+				maxSeverity:   logging.Debug,
+				reservedKeys:  []string{"requestSize", "responseSize", "logCount"},
+				reqAttributes: map[string]any{},
+				attributes:    map[string]any{},
 			},
 		},
 	}
@@ -201,8 +202,11 @@ func TestNewConsoleLogger(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := newConsoleLogger(tt.args.r, tt.args.noColor)
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(consoleLogger{}), cmpopts.IgnoreFields(consoleLogger{}, "r", "mu")); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(consoleLogger{}), cmpopts.IgnoreFields(consoleLogger{}, "r", "mu", "parent")); diff != "" {
 				t.Errorf("NewConsoleLogger() mismatch (-want +got):\n%s", diff)
+			}
+			if got.parent != got {
+				t.Errorf("NewConsoleLogger().parent is not self")
 			}
 		})
 	}
@@ -250,6 +254,7 @@ func Test_consoleLogger(t *testing.T) {
 
 			u, _ := url.Parse("http://some.domain.com/path")
 			l := &consoleLogger{r: &http.Request{Method: http.MethodGet, URL: u}, noColor: tt.args.noColor}
+			l.parent = l
 			format := "Formatted %s"
 
 			l.Debug(ctx, tt.args.v2)

@@ -15,11 +15,11 @@ const (
 // If no logger is stored in the context, a stderr logger is returned.
 func fromCtx(ctx context.Context) ctxLogger {
 	if ctx == nil {
-		return &stdErrLogger{}
+		return newStdErrLogger()
 	}
 	l, ok := ctx.Value(logKey).(ctxLogger)
 	if !ok {
-		return &stdErrLogger{}
+		return newStdErrLogger()
 	}
 
 	return l
@@ -28,7 +28,7 @@ func fromCtx(ctx context.Context) ctxLogger {
 // fromReq gets the logger in the request's context.
 func fromReq(r *http.Request) ctxLogger {
 	if r == nil {
-		return &stdErrLogger{}
+		return newStdErrLogger()
 	}
 
 	return fromCtx(r.Context())
@@ -57,8 +57,19 @@ type ctxLogger interface {
 	Error(ctx context.Context, v any)
 	// Errorf logs an error message with format.
 	Errorf(ctx context.Context, format string, v ...any)
-	// AddRequestAttribute adds an attribute (key, value) for the parent request log. If the key already exists, its value is overwritten
+	// AddRequestAttribute adds an attribute (kv) for the parent request log. If the key already exists, its value is overwritten
 	AddRequestAttribute(key string, value any) error
 	// RemoveRequestAttributes removes attributes from the parent request log. If a key does not exist, it is ignored
 	RemoveRequestAttributes(keys ...string)
+	// WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
+	WithAttribute(key string, value any) attributer
+}
+
+// attributer defines the interface for adding attributes for child (trace) logs
+type attributer interface {
+	// AddAttribute adds an attribute (kv) for the child (trace) log. If the key already exists, its value is overwritten
+	AddAttribute(key string, value any) error
+
+	// Logger returns a ctxLogger with the child (trace) attributes embedded
+	Logger() ctxLogger
 }

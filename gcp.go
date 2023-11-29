@@ -74,7 +74,10 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l.mu.Lock()
 	logCount := l.logCount
 	maxSeverity := l.maxSeverity
-	attributes := l.attributes
+	attributes := make(map[string]any)
+	for k, v := range l.reqAttributes {
+		attributes[k] = v
+	}
 	l.mu.Unlock()
 
 	if !g.logAll && logCount == 0 {
@@ -130,20 +133,26 @@ type logger interface {
 }
 
 type gcpLogger struct {
-	lg          logger
-	traceID     string
-	mu          sync.Mutex
-	maxSeverity logging.Severity
-	logCount    int
-	attributes  map[string]any
+	parent        *gcpLogger
+	logger        logger
+	traceID       string
+	attributes    map[string]any // attributes for child (trace) logs
+	mu            sync.Mutex
+	maxSeverity   logging.Severity
+	logCount      int
+	reqAttributes map[string]any // attributes for the parent request log
 }
 
 func newGCPLogger(lg logger, traceID string) *gcpLogger {
-	return &gcpLogger{
-		lg:         lg,
-		traceID:    traceID,
-		attributes: make(map[string]any),
+	l := &gcpLogger{
+		logger:        lg,
+		traceID:       traceID,
+		reqAttributes: make(map[string]any),
+		attributes:    make(map[string]any),
 	}
+	l.parent = l
+
+	return l
 }
 
 // Debug logs a debug message.
@@ -195,7 +204,7 @@ func (l *gcpLogger) AddRequestAttribute(key string, value any) error {
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.attributes[key] = value
+	l.reqAttributes[key] = value
 
 	return nil
 }
@@ -206,33 +215,75 @@ func (l *gcpLogger) RemoveRequestAttributes(keys ...string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for _, k := range keys {
-		delete(l.attributes, k)
+		delete(l.reqAttributes, k)
 	}
 }
 
-func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, p any) {
-	l.mu.Lock()
-	if l.maxSeverity < severity {
-		l.maxSeverity = severity
+// WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
+func (l *gcpLogger) WithAttribute(key string, value any) attributer {
+	attrs := make(map[string]any)
+	for k, v := range l.attributes {
+		attrs[k] = v
 	}
-	l.logCount++
-	l.mu.Unlock()
+	attrs[key] = value
 
-	if err, ok := p.(error); ok {
-		p = err.Error()
+	return &gcpAttributer{logger: l, attributes: attrs}
+}
+
+func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, msg any) {
+	l.parent.mu.Lock()
+	if l.parent.maxSeverity < severity {
+		l.parent.maxSeverity = severity
+	}
+	l.parent.logCount++
+	l.parent.mu.Unlock()
+
+	if err, ok := msg.(error); ok {
+		msg = err.Error()
 	}
 
 	span := trace.SpanFromContext(ctx)
+	attrs := make(map[string]any)
+	for k, v := range l.attributes {
+		attrs[k] = v
+	}
+	attrs[gcpMessageKey] = msg
 
-	l.lg.Log(
+	l.logger.Log(
 		logging.Entry{
-			Payload: map[string]any{
-				gcpMessageKey: p,
-			},
+			Payload:      attrs,
 			Severity:     severity,
 			Trace:        l.traceID,
 			SpanID:       span.SpanContext().SpanID().String(),
 			TraceSampled: span.SpanContext().IsSampled(),
 		},
 	)
+}
+
+type gcpAttributer struct {
+	logger     *gcpLogger
+	attributes map[string]any
+}
+
+// AddAttribute adds an attribute (key, value) for the child (trace) log
+// If the key already exists, its value is overwritten
+func (a *gcpAttributer) AddAttribute(key string, value any) error {
+	if key == gcpMessageKey {
+		return errors.Newf("'%s' is a reserved key", key)
+	}
+
+	a.attributes[key] = value
+
+	return nil
+}
+
+// Logger returns a ctxLogger with the child (trace) attributes embedded
+func (a *gcpAttributer) Logger() ctxLogger {
+	l := newGCPLogger(a.logger.logger, a.logger.traceID)
+	l.parent = a.logger.parent
+	for k, v := range a.attributes {
+		l.attributes[k] = v
+	}
+
+	return l
 }

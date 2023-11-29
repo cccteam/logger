@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"reflect"
 	"testing"
 
 	"cloud.google.com/go/logging"
@@ -407,9 +406,10 @@ func Test_newGCPLogger(t *testing.T) {
 				traceID: "hello",
 			},
 			want: &gcpLogger{
-				lg:         &logging.Logger{},
-				traceID:    "hello",
-				attributes: map[string]any{},
+				logger:        &logging.Logger{},
+				traceID:       "hello",
+				reqAttributes: map[string]any{},
+				attributes:    map[string]any{},
 			},
 		},
 	}
@@ -417,8 +417,12 @@ func Test_newGCPLogger(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := newGCPLogger(tt.args.lg, tt.args.traceID); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("New() = %v, want %v", got, tt.want)
+			got := newGCPLogger(tt.args.lg, tt.args.traceID)
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(gcpLogger{}), cmpopts.IgnoreFields(gcpLogger{}, "logger", "mu", "parent")); diff != "" {
+				t.Errorf("newGCPLogger() mismatch (-want +got):\n%s", diff)
+			}
+			if got.parent != got {
+				t.Errorf("newGCPLogger().parent is not self")
 			}
 		})
 	}
@@ -486,10 +490,11 @@ func Test_gcpLogger(t *testing.T) {
 			var buf bytes.Buffer
 
 			l := &gcpLogger{
-				lg: &testLogger{
+				logger: &testLogger{
 					buf: &buf,
 				},
 			}
+			l.parent = l
 
 			l.Debug(ctx, tt.args.v2)
 			if s := buf.String(); s != tt.wantDebug {

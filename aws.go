@@ -73,7 +73,7 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l.mu.Lock()
 	logCount := l.logCount
 	maxLevel := l.maxLevel
-	attributes := l.attributes
+	attributes := l.reqAttributes
 	l.mu.Unlock()
 
 	if !h.logAll && logCount == 0 {
@@ -100,22 +100,31 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type awsLogger struct {
-	logger       awslog
-	traceID      string
-	reservedKeys []string
-	mu           sync.Mutex
-	maxLevel     slog.Level
-	logCount     int
-	attributes   map[string]any
+	parent        *awsLogger
+	logger        awslog
+	traceID       string
+	reservedKeys  []string
+	attributes    map[string]any // attributes for child (trace) logs
+	mu            sync.Mutex
+	maxLevel      slog.Level
+	logCount      int
+	reqAttributes map[string]any // attributes for the parent request log
 }
 
 func newAWSLogger(logger awslog, traceID string) *awsLogger {
-	return &awsLogger{
-		logger:       logger,
-		traceID:      traceID,
-		reservedKeys: []string{awsTraceIDKey, awsSpanIDKey, awsHTTPElapsedKey, awsHTTPMethodKey, awsHTTPURLKey, awsHTTPStatusCodeKey, awsHTTPRespLengthKey, awsHTTPUserAgentKey, awsHTTPRemoteIPKey, awsHTTPSchemeKey, awsHTTPProtoKey},
-		attributes:   make(map[string]any),
+	l := &awsLogger{
+		logger:  logger,
+		traceID: traceID,
+		reservedKeys: []string{
+			awsTraceIDKey, awsSpanIDKey, awsHTTPElapsedKey, awsHTTPMethodKey, awsHTTPURLKey, awsHTTPStatusCodeKey,
+			awsHTTPRespLengthKey, awsHTTPUserAgentKey, awsHTTPRemoteIPKey, awsHTTPSchemeKey, awsHTTPProtoKey,
+		},
+		reqAttributes: make(map[string]any),
+		attributes:    make(map[string]any),
 	}
+	l.parent = l
+
+	return l
 }
 
 type awslog interface {
@@ -171,7 +180,7 @@ func (l *awsLogger) AddRequestAttribute(key string, value any) error {
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.attributes[key] = value
+	l.reqAttributes[key] = value
 
 	return nil
 }
@@ -182,24 +191,66 @@ func (l *awsLogger) RemoveRequestAttributes(keys ...string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for _, k := range keys {
-		delete(l.attributes, k)
+		delete(l.reqAttributes, k)
 	}
 }
 
-func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
-	l.mu.Lock()
-	if l.maxLevel < level {
-		l.maxLevel = level
+// WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
+func (l *awsLogger) WithAttribute(key string, value any) attributer {
+	attrs := make(map[string]any)
+	for k, v := range l.attributes {
+		attrs[k] = v
 	}
-	l.logCount++
-	l.mu.Unlock()
+	attrs[key] = value
+
+	return &awsAttributer{logger: l, attributes: attrs}
+}
+
+func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
+	l.parent.mu.Lock()
+	if l.parent.maxLevel < level {
+		l.parent.maxLevel = level
+	}
+	l.parent.logCount++
+	l.parent.mu.Unlock()
 
 	span := trace.SpanFromContext(ctx)
 	attr := []slog.Attr{
 		slog.String(awsTraceIDKey, l.traceID),
 		slog.String(awsSpanIDKey, span.SpanContext().SpanID().String()),
 	}
+	for k, v := range l.attributes {
+		attr = append(attr, slog.Any(k, v))
+	}
 	l.logger.LogAttrs(ctx, level, message, attr...)
+}
+
+type awsAttributer struct {
+	logger     *awsLogger
+	attributes map[string]any
+}
+
+// AddAttribute adds an attribute (key, value) for the child (trace) log
+// If the key already exists, its value is overwritten
+func (a *awsAttributer) AddAttribute(key string, value any) error {
+	if slices.Contains(a.logger.reservedKeys, key) {
+		return errors.Newf("'%s' is a reserved key", key)
+	}
+
+	a.attributes[key] = value
+
+	return nil
+}
+
+// Logger returns a ctxLogger with the child (trace) attributes embedded
+func (a *awsAttributer) Logger() ctxLogger {
+	l := newAWSLogger(a.logger.logger, a.logger.traceID)
+	l.parent = a.logger.parent
+	for k, v := range a.attributes {
+		l.attributes[k] = v
+	}
+
+	return l
 }
 
 // httpAttributes returns a slice of slog.Attr for the http request and response
