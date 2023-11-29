@@ -61,10 +61,6 @@ func (l *stdErrLogger) AddRequestAttribute(_ string, _ any) error {
 	return nil
 }
 
-// RemoveRequestAttributes removes attributes from the parent request log
-// For this std logger, there is no parent request log, so this is a no-op
-func (l *stdErrLogger) RemoveRequestAttributes(_ ...string) {}
-
 // WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
 func (l *stdErrLogger) WithAttribute(key string, value any) attributer {
 	attrs := make(map[string]any)

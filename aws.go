@@ -185,16 +185,6 @@ func (l *awsLogger) AddRequestAttribute(key string, value any) error {
 	return nil
 }
 
-// RemoveRequestAttributes removes attributes from the parent request log
-// If a key does not exist, it is ignored
-func (l *awsLogger) RemoveRequestAttributes(keys ...string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	for _, k := range keys {
-		delete(l.reqAttributes, k)
-	}
-}
-
 // WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
 func (l *awsLogger) WithAttribute(key string, value any) attributer {
 	attrs := make(map[string]any)

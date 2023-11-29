@@ -59,8 +59,6 @@ type ctxLogger interface {
 	Errorf(ctx context.Context, format string, v ...any)
 	// AddRequestAttribute adds an attribute (kv) for the parent request log. If the key already exists, its value is overwritten
 	AddRequestAttribute(key string, value any) error
-	// RemoveRequestAttributes removes attributes from the parent request log. If a key does not exist, it is ignored
-	RemoveRequestAttributes(keys ...string)
 	// WithAttribute adds the provided kv as a child (trace) log attribute and returns an attributer for adding additional attributes
 	WithAttribute(key string, value any) attributer
 }
