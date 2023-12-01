@@ -180,14 +180,12 @@ func (l *consoleLogger) AddRequestAttribute(key string, value any) {
 	l.reqAttributes[key] = value
 }
 
-// WithAttribute returns an attributer with the provided kv embedded as a child (trace) log attribute
-// If the key already exists, its value is overwritten
-func (l *consoleLogger) WithAttribute(key string, value any) attributer {
+// WithAttributes returns an attributer that can be used to add child (trace) log attributes
+func (l *consoleLogger) WithAttributes() attributer {
 	attrs := make(map[string]any)
 	for k, v := range l.attributes {
 		attrs[k] = v
 	}
-	attrs[key] = value
 
 	return &consoleAttributer{logger: l, attributes: attrs}
 }

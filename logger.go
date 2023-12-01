@@ -92,13 +92,11 @@ func (l *Logger) AddRequestAttribute(key string, value any) *Logger {
 	return l
 }
 
-// WithAttribute returns an AttributerLogger with the provided kv embedded as a child (trace) log attribute
-// If the key matches a reserved key, it will be prefixed with "custom_"
-// If the key already exists, its value is overwritten
-func (l *Logger) WithAttribute(key string, value any) *AttributerLogger {
+// WithAttributes returns an AttributerLogger that can be used to add child (trace) log attributes
+func (l *Logger) WithAttributes() *AttributerLogger {
 	return &AttributerLogger{
 		logger:     l,
-		attributer: l.lg.WithAttribute(key, value),
+		attributer: l.lg.WithAttributes(),
 	}
 }
 

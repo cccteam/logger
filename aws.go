@@ -198,19 +198,12 @@ func (l *awsLogger) AddRequestAttribute(key string, value any) {
 	l.reqAttributes[key] = value
 }
 
-// WithAttribute returns an attributer with the provided kv embedded as a child (trace) log attribute
-// If the key matches a reserved key, it will be prefixed with "custom_"
-// If the key already exists, its value is overwritten
-func (l *awsLogger) WithAttribute(key string, value any) attributer {
-	if slices.Contains(l.rsvdKeys, key) {
-		key = customPrefix + key
-	}
-
+// WithAttributes returns an attributer that can be used to add child (trace) log attributes
+func (l *awsLogger) WithAttributes() attributer {
 	attrs := make(map[string]any)
 	for k, v := range l.attributes {
 		attrs[k] = v
 	}
-	attrs[key] = value
 
 	return &awsAttributer{logger: l, attributes: attrs}
 }
