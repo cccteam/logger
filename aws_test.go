@@ -472,3 +472,80 @@ func (c *captureSLogger) LogAttrs(ctx context.Context, level slog.Level, msg str
 	c.msg = msg
 	c.attrs = attrs
 }
+
+func Test_awsLogger_newChild(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		root          *awsLogger
+		logger        awslog
+		traceID       string
+		rsvdKeys      []string
+		rsvdReqKeys   []string
+		attributes    map[string]any
+		maxLevel      slog.Level
+		logCount      int
+		reqAttributes map[string]any
+	}
+	tests := []struct {
+		name string
+		fields
+		want *awsLogger
+	}{
+		{
+			name: "success",
+			fields: fields{
+				root: &awsLogger{
+					traceID: "root trace id",
+				},
+				logger:        &testSlogger{},
+				traceID:       "1234567890",
+				rsvdKeys:      []string{"test reserved key 1", "test reserved key 2"},
+				rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
+				attributes:    map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+				maxLevel:      slog.LevelWarn,
+				logCount:      2,
+				reqAttributes: map[string]any{"test_req_key_1": "test_req_value_1", "test_req_key_2": "test_req_value_2"},
+			},
+			want: &awsLogger{
+				root: &awsLogger{
+					traceID: "root trace id",
+				},
+				traceID:       "1234567890",
+				rsvdKeys:      []string{"test reserved key 1", "test reserved key 2"},
+				rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
+				attributes:    map[string]any{},
+				maxLevel:      slog.LevelInfo,
+				logCount:      0,
+				reqAttributes: nil,
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := &awsLogger{
+				root:          tt.fields.root,
+				logger:        tt.fields.logger,
+				traceID:       tt.fields.traceID,
+				rsvdKeys:      tt.fields.rsvdKeys,
+				rsvdReqKeys:   tt.fields.rsvdReqKeys,
+				attributes:    tt.fields.attributes,
+				maxLevel:      tt.fields.maxLevel,
+				logCount:      tt.fields.logCount,
+				reqAttributes: tt.fields.reqAttributes,
+			}
+
+			got := l.newChild()
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(awsLogger{}), cmpopts.IgnoreFields(awsLogger{}, "mu", "logger")); diff != "" {
+				t.Errorf("awsLogger.newChild() mismatch (-want +got):\n%s", diff)
+			}
+			if got.logger != l.logger {
+				t.Errorf("awsLogger.newChild().logger != awsLogger.logger")
+			}
+			if &got.mu == &l.mu {
+				t.Errorf("&awsLogger.newChild().mu = &awsLogger.mu")
+			}
+		})
+	}
+}
