@@ -203,8 +203,12 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 						w.WriteHeader(tt.args.status)
 						handlerCalled = true
 
-						Req(r).AddRequestAttribute("test_key_1", "test_value_1")
-						Req(r).AddRequestAttribute("test_key_2", "test_value_2")
+						l, ok := Req(r).lg.(*awsLogger)
+						if !ok {
+							t.Errorf("Failed to get awsLogger from request")
+						}
+						l.reqAttributes["test_key_1"] = "test_value_1"
+						l.reqAttributes["test_key_2"] = "test_value_2"
 					},
 				),
 			}

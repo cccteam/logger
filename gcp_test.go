@@ -265,8 +265,8 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 							}
 						}
 
-						l := Req(r)
-						if l, ok := l.lg.(*gcpLogger); ok {
+						l, ok := Req(r).lg.(*gcpLogger)
+						if ok {
 							traceID = l.traceID
 						} else {
 							t.Fatalf("Req() = %v, wanted: %T", l, &gcpLogger{})
@@ -275,8 +275,8 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 						w.WriteHeader(tt.args.status)
 						handlerCalled = true
 
-						Req(r).AddRequestAttribute("test_key_1", "test_value_1")
-						Req(r).AddRequestAttribute("test_key_2", "test_value_2")
+						l.reqAttributes["test_key_1"] = "test_value_1"
+						l.reqAttributes["test_key_2"] = "test_value_2"
 					},
 				),
 			}

@@ -210,6 +210,8 @@ func Test_consoleHandler_ServeHTTP(t *testing.T) {
 						if !ok {
 							t.Fatalf("Failed to get consoleLogger from request")
 						}
+						l.reqAttributes["test_key_1"] = "test_value_1"
+						l.reqAttributes["test_key_2"] = "test_value_2"
 					},
 				),
 			}
