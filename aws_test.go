@@ -451,28 +451,6 @@ func Test_awsLogger(t *testing.T) {
 	}
 }
 
-type testSlogger struct {
-	buf *bytes.Buffer
-}
-
-func (t *testSlogger) LogAttrs(_ context.Context, _ slog.Level, msg string, _ ...slog.Attr) {
-	_, _ = t.buf.WriteString(msg)
-}
-
-type captureSLogger struct {
-	ctx   context.Context
-	level slog.Level
-	msg   string
-	attrs []slog.Attr
-}
-
-func (c *captureSLogger) LogAttrs(ctx context.Context, level slog.Level, msg string, attrs ...slog.Attr) {
-	c.ctx = ctx
-	c.level = level
-	c.msg = msg
-	c.attrs = attrs
-}
-
 func Test_awsLogger_newChild(t *testing.T) {
 	t.Parallel()
 	type fields struct {
@@ -548,4 +526,26 @@ func Test_awsLogger_newChild(t *testing.T) {
 			}
 		})
 	}
+}
+
+type testSlogger struct {
+	buf *bytes.Buffer
+}
+
+func (t *testSlogger) LogAttrs(_ context.Context, _ slog.Level, msg string, _ ...slog.Attr) {
+	_, _ = t.buf.WriteString(msg)
+}
+
+type captureSLogger struct {
+	ctx   context.Context
+	level slog.Level
+	msg   string
+	attrs []slog.Attr
+}
+
+func (c *captureSLogger) LogAttrs(ctx context.Context, level slog.Level, msg string, attrs ...slog.Attr) {
+	c.ctx = ctx
+	c.level = level
+	c.msg = msg
+	c.attrs = attrs
 }
