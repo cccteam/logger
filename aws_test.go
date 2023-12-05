@@ -165,7 +165,7 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 			wantLevel: slog.LevelWarn,
 		},
 		{
-			name: "logAll=true no logging",
+			name: "logging for error status",
 			fields: fields{
 				projectID: "my-big-project",
 				logAll:    true,
@@ -202,6 +202,9 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 
 						w.WriteHeader(tt.args.status)
 						handlerCalled = true
+
+						Req(r).AddRequestAttribute("test_key_1", "test_value_1")
+						Req(r).AddRequestAttribute("test_key_2", "test_value_2")
 					},
 				),
 			}
@@ -213,17 +216,15 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 			if !handlerCalled {
 				t.Errorf("Failed to call handler")
 			}
-			if tt.args.logs == 0 {
+			if !tt.fields.logAll && tt.args.logs == 0 {
 				return
 			}
 			if l.level != tt.wantLevel {
 				t.Errorf("Level = %v, want %v", l.level, tt.wantLevel)
 			}
-
-			if l.attrs == nil {
-				t.Errorf("Attrs = %v, want %v", l.attrs, "not nil")
+			if len(l.attrs) != 13 {
+				t.Errorf("len(l.attrs) = %v, want %v", len(l.attrs), 13)
 			}
-
 			if pl := l.msg; pl != "" {
 				if pl != "Parent Log Entry" {
 					t.Errorf("Message = %v, want %v", pl, "Parent Log Entry")

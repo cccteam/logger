@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -137,11 +138,45 @@ func TestConsoleExporter_Middleware(t *testing.T) {
 func Test_consoleHandler_ServeHTTP(t *testing.T) {
 	t.Parallel()
 
+	type args struct {
+		status int
+		level  slog.Level
+	}
 	tests := []struct {
-		name string
+		name            string
+		args            args
+		wantMaxSeverity logging.Severity
 	}{
 		{
-			name: "run it",
+			name: "info logging",
+			args: args{
+				status: http.StatusOK,
+				level:  slog.LevelInfo,
+			},
+			wantMaxSeverity: logging.Info,
+		},
+		{
+			name: "warning logging",
+			args: args{
+				status: http.StatusOK,
+				level:  slog.LevelWarn,
+			},
+			wantMaxSeverity: logging.Warning,
+		},
+		{
+			name: "error logging",
+			args: args{
+				status: http.StatusOK,
+				level:  slog.LevelError,
+			},
+			wantMaxSeverity: logging.Error,
+		},
+		{
+			name: "logging for error status",
+			args: args{
+				status: http.StatusInternalServerError,
+			},
+			wantMaxSeverity: logging.Error,
 		},
 	}
 	for _, tt := range tests {
@@ -150,20 +185,48 @@ func Test_consoleHandler_ServeHTTP(t *testing.T) {
 			t.Parallel()
 
 			var handlerCalled bool
-			c := &consoleHandler{
+			var l *consoleLogger
+			handler := &consoleHandler{
 				next: http.HandlerFunc(
 					func(w http.ResponseWriter, r *http.Request) {
+						switch tt.args.level {
+						case slog.LevelInfo:
+							Req(r).Info("some log")
+						case slog.LevelWarn:
+							Req(r).Warn("some log")
+						case slog.LevelError:
+							Req(r).Error("some log")
+						default:
+						}
+
+						w.WriteHeader(tt.args.status)
 						handlerCalled = true
+
+						Req(r).AddRequestAttribute("test_key_1", "test_value_1")
+						Req(r).AddRequestAttribute("test_key_2", "test_value_2")
+
+						var ok bool
+						l, ok = Req(r).lg.(*consoleLogger)
+						if !ok {
+							t.Fatalf("Failed to get consoleLogger from request")
+						}
 					},
 				),
 			}
 
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			c.ServeHTTP(w, r)
+			handler.ServeHTTP(w, r)
 
 			if !handlerCalled {
 				t.Errorf("Failed to call handler")
+			}
+			if l.maxSeverity != tt.wantMaxSeverity {
+				t.Errorf("Level = %v, want %v", l.maxSeverity, tt.wantMaxSeverity)
+			}
+			wantAttrs := map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"}
+			if cmp.Diff(l.reqAttributes, wantAttrs) != "" {
+				t.Errorf("Attributes mismatch (-want +got):\n%s", cmp.Diff(l.reqAttributes, wantAttrs))
 			}
 		})
 	}

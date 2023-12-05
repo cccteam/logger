@@ -227,7 +227,7 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			wantLevel: logging.Warning,
 		},
 		{
-			name: "logAll=true no logging",
+			name: "logging for error status",
 			fields: fields{
 				projectID: "my-big-project",
 				logAll:    true,
@@ -274,6 +274,9 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 
 						w.WriteHeader(tt.args.status)
 						handlerCalled = true
+
+						Req(r).AddRequestAttribute("test_key_1", "test_value_1")
+						Req(r).AddRequestAttribute("test_key_2", "test_value_2")
 					},
 				),
 			}
@@ -285,7 +288,7 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			if !handlerCalled {
 				t.Errorf("Failed to call handler")
 			}
-			if tt.args.logs == 0 {
+			if !tt.fields.logAll && tt.args.logs == 0 {
 				return
 			}
 			if l.e.Severity != tt.wantLevel {
@@ -294,17 +297,18 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			if l.e.Trace != traceID {
 				t.Errorf("Trace = %v, want %v", l.e.Trace, traceID)
 			}
-			if pl, ok := l.e.Payload.(map[string]any); ok {
-				if m, ok := pl["message"].(string); ok {
-					if m != "Parent Log Entry" {
-						t.Errorf("Message = %v, want %v", m, "Parent Log Entry")
-					}
-				} else {
-					t.Fatalf("Message = %T, want %T", pl["message"], "")
-				}
-			} else {
-				t.Fatalf("Payload = %T, want %T", l.e.Payload, map[string]any{})
+
+			wantPayload := map[string]any{
+				"message":    "Parent Log Entry",
+				"test_key_1": "test_value_1",
+				"test_key_2": "test_value_2",
 			}
+			if pl, ok := l.e.Payload.(map[string]any); ok {
+				if diff := cmp.Diff(pl, wantPayload); diff != "" {
+					t.Errorf("Payload mismatch (-want +got):\n%s", diff)
+				}
+			}
+
 			if l.e.HTTPRequest.Status != tt.args.status {
 				t.Errorf("Status = %v, want %v", l.e.HTTPRequest.Status, tt.args.status)
 			}
