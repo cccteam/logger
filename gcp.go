@@ -217,9 +217,9 @@ func (l *gcpLogger) AddRequestAttribute(key string, value any) {
 		key = customPrefix + key
 	}
 
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.reqAttributes[key] = value
+	l.root.mu.Lock()
+	defer l.root.mu.Unlock()
+	l.root.reqAttributes[key] = value
 }
 
 // WithAttributes returns an attributer that can be used to add child (trace) log attributes
