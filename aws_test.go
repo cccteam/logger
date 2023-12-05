@@ -532,6 +532,67 @@ func Test_awsLogger_newChild(t *testing.T) {
 	}
 }
 
+func Test_awsLogger_AddRequestAttribute(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		root        *awsLogger
+		rsvdReqKeys []string
+	}
+	type args struct {
+		key   string
+		value any
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   map[string]any
+	}{
+		{
+			name: "prefix reserved key with 'custom_'",
+			fields: fields{
+				root: &awsLogger{
+					reqAttributes: map[string]any{"test_key": "test_value"},
+				},
+				rsvdReqKeys: []string{"test_key 1", "test_key"},
+			},
+			args: args{
+				key:   "test_key",
+				value: 512,
+			},
+			want: map[string]any{"test_key": "test_value", "custom_test_key": 512},
+		},
+		{
+			name: "success adding request attribute",
+			fields: fields{
+				root: &awsLogger{
+					reqAttributes: map[string]any{"test_key": "test_value"},
+				},
+				rsvdReqKeys: []string{"test_key 1"},
+			},
+			args: args{
+				key:   "test_key",
+				value: 512,
+			},
+			want: map[string]any{"test_key": 512},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := &awsLogger{
+				root:        tt.fields.root,
+				rsvdReqKeys: tt.fields.rsvdReqKeys,
+			}
+			l.AddRequestAttribute(tt.args.key, tt.args.value)
+			if diff := cmp.Diff(l.root.reqAttributes, tt.want); diff != "" {
+				t.Errorf("awsLogger.AddRequestAttribute() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 type testSlogger struct {
 	buf *bytes.Buffer
 }
