@@ -625,6 +625,67 @@ func Test_gcpLogger_newChild(t *testing.T) {
 	}
 }
 
+func Test_gcpLogger_AddRequestAttribute(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		root     *gcpLogger
+		rsvdKeys []string
+	}
+	type args struct {
+		key   string
+		value any
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   map[string]any
+	}{
+		{
+			name: "prefix reserved key with 'custom_'",
+			fields: fields{
+				root: &gcpLogger{
+					reqAttributes: map[string]any{"test_key": "test_value"},
+				},
+				rsvdKeys: []string{"test_key 1", "test_key"},
+			},
+			args: args{
+				key:   "test_key",
+				value: 512,
+			},
+			want: map[string]any{"test_key": "test_value", "custom_test_key": 512},
+		},
+		{
+			name: "success adding request attribute",
+			fields: fields{
+				root: &gcpLogger{
+					reqAttributes: map[string]any{"test_key": "test_value"},
+				},
+				rsvdKeys: []string{"test_key 1"},
+			},
+			args: args{
+				key:   "test_key",
+				value: 512,
+			},
+			want: map[string]any{"test_key": 512},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := &gcpLogger{
+				root:     tt.fields.root,
+				rsvdKeys: tt.fields.rsvdKeys,
+			}
+			l.AddRequestAttribute(tt.args.key, tt.args.value)
+			if diff := cmp.Diff(l.root.reqAttributes, tt.want); diff != "" {
+				t.Errorf("gcpLogger.AddRequestAttribute() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func disableMetaServertest(t *testing.T) {
 	t.Helper()
 
