@@ -122,8 +122,8 @@ func (l *consoleLogger) newChild() *consoleLogger {
 		noColor:       l.noColor,
 		rsvdReqKeys:   l.rsvdReqKeys,
 		maxSeverity:   logging.Debug,
-		reqAttributes: make(map[string]any),
 		attributes:    make(map[string]any),
+		reqAttributes: nil, // stating zero value for clear intent
 	}
 }
 

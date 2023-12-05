@@ -164,8 +164,8 @@ func (l *gcpLogger) newChild() *gcpLogger {
 		logger:        l.logger,
 		traceID:       l.traceID,
 		rsvdKeys:      l.rsvdKeys,
-		reqAttributes: make(map[string]any),
 		attributes:    make(map[string]any),
+		reqAttributes: nil, // stating zero value for clear intent
 	}
 }
 
