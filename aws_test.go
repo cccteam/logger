@@ -541,10 +541,10 @@ func Test_awsLogger_newChild(t *testing.T) {
 				t.Errorf("awsLogger.newChild() mismatch (-want +got):\n%s", diff)
 			}
 			if got.logger != l.logger {
-				t.Errorf("awsLogger.newChild().logger != awsLogger.logger")
+				t.Error("awsLogger.newChild().logger != awsLogger.logger")
 			}
 			if &got.mu == &l.mu {
-				t.Errorf("&awsLogger.newChild().mu = &awsLogger.mu")
+				t.Error("&awsLogger.newChild().mu = &awsLogger.mu")
 			}
 		})
 	}

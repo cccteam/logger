@@ -370,3 +370,76 @@ func Test_consoleLogger(t *testing.T) {
 		})
 	}
 }
+
+func Test_consoleLogger_newChild(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		root          *consoleLogger
+		r             *http.Request
+		noColor       bool
+		rsvdReqKeys   []string
+		attributes    map[string]any
+		maxSeverity   logging.Severity
+		logCount      int
+		reqAttributes map[string]any
+	}
+	tests := []struct {
+		name string
+		fields
+		want *consoleLogger
+	}{
+		{
+			name: "success",
+			fields: fields{
+				root: &consoleLogger{
+					logCount: 123,
+				},
+				r:             httptest.NewRequest(http.MethodGet, "/test/url", http.NoBody),
+				noColor:       true,
+				rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
+				attributes:    map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+				maxSeverity:   logging.Warning,
+				logCount:      456,
+				reqAttributes: map[string]any{"test_req_key_1": "test_req_value_1", "test_req_key_2": "test_req_value_2"},
+			},
+			want: &consoleLogger{
+				root: &consoleLogger{
+					logCount: 123,
+				},
+				noColor:       true,
+				rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
+				attributes:    map[string]any{},
+				maxSeverity:   logging.Debug,
+				logCount:      0,
+				reqAttributes: nil,
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := &consoleLogger{
+				root:          tt.fields.root,
+				r:             tt.fields.r,
+				noColor:       tt.fields.noColor,
+				rsvdReqKeys:   tt.fields.rsvdReqKeys,
+				attributes:    tt.fields.attributes,
+				maxSeverity:   tt.fields.maxSeverity,
+				logCount:      tt.fields.logCount,
+				reqAttributes: tt.fields.reqAttributes,
+			}
+
+			got := l.newChild()
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(consoleLogger{}), cmpopts.IgnoreFields(consoleLogger{}, "mu", "r")); diff != "" {
+				t.Errorf("consoleLogger.newChild() mismatch (-want +got):\n%s", diff)
+			}
+			if got.r != l.r {
+				t.Error("consoleLogger.newChild().r != consoleLogger.r")
+			}
+			if &got.mu == &l.mu {
+				t.Errorf("&consoleLogger.newChild().mu = &consoleLogger.mu")
+			}
+		})
+	}
+}
