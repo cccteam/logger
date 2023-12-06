@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -182,12 +184,20 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 			t.Parallel()
 
 			var handlerCalled bool
+
 			l := &captureSLogger{}
 			handler := &awsHandler{
 				logger: l,
 				logAll: tt.fields.logAll,
 				next: http.HandlerFunc(
 					func(w http.ResponseWriter, r *http.Request) {
+						awsLgr, ok := Req(r).lg.(*awsLogger)
+						if !ok {
+							t.Fatal("Failed to get awsLogger from request")
+						}
+						awsLgr.reqAttributes["test_req_key_1"] = "test_req_value_1"
+						awsLgr.reqAttributes["test_req_key_2"] = "test_req_value_2"
+
 						for i := 0; i < tt.args.logs; i++ {
 							switch tt.args.level {
 							case slog.LevelInfo:
@@ -202,20 +212,12 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 
 						w.WriteHeader(tt.args.status)
 						handlerCalled = true
-
-						l, ok := Req(r).lg.(*awsLogger)
-						if !ok {
-							t.Errorf("Failed to get awsLogger from request")
-						}
-						l.reqAttributes["test_key_1"] = "test_value_1"
-						l.reqAttributes["test_key_2"] = "test_value_2"
 					},
 				),
 			}
 
-			w := httptest.NewRecorder()
 			r := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			handler.ServeHTTP(w, r)
+			handler.ServeHTTP(httptest.NewRecorder(), r)
 
 			if !handlerCalled {
 				t.Errorf("Failed to call handler")
@@ -227,12 +229,10 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 				t.Errorf("Level = %v, want %v", l.level, tt.wantLevel)
 			}
 			if len(l.attrs) != 13 {
-				t.Errorf("len(l.attrs) = %v, want %v", len(l.attrs), 13)
+				t.Errorf("Expected %d request attributes, got %d", 13, len(l.attrs))
 			}
-			if pl := l.msg; pl != "" {
-				if pl != "Parent Log Entry" {
-					t.Errorf("Message = %v, want %v", pl, "Parent Log Entry")
-				}
+			if l.msg != "Parent Log Entry" {
+				t.Errorf("Message = %v, want %v", l.msg, "Parent Log Entry")
 			}
 		})
 	}
@@ -339,6 +339,10 @@ func Test_newAWSLogger(t *testing.T) {
 func Test_awsLogger(t *testing.T) {
 	t.Parallel()
 
+	type fields struct {
+		traceID    string
+		attributes map[string]any
+	}
 	type args struct {
 		format string
 		v      []any
@@ -346,6 +350,7 @@ func Test_awsLogger(t *testing.T) {
 	}
 	tests := []struct {
 		name       string
+		fields     fields
 		args       args
 		wantDebug  string
 		wantDebugf string
@@ -358,6 +363,10 @@ func Test_awsLogger(t *testing.T) {
 	}{
 		{
 			name: "Strings",
+			fields: fields{
+				traceID:    "1234567890",
+				attributes: map[string]any{"a test key": "a test value"},
+			},
 			args: args{
 				format: "Formatted %s",
 				v:      []any{"Message"},
@@ -374,6 +383,10 @@ func Test_awsLogger(t *testing.T) {
 		},
 		{
 			name: "String & Error",
+			fields: fields{
+				traceID:    "1234567890",
+				attributes: map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+			},
 			args: args{
 				format: "Formatted %s",
 				v:      []any{"Message"},
@@ -394,62 +407,68 @@ func Test_awsLogger(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
+			ctx, span := otel.Tracer("test tracer").Start(context.Background(), "a test")
 			var buf bytes.Buffer
 
 			l := &awsLogger{
 				logger: &testSlogger{
 					buf: &buf,
 				},
+				attributes: tt.fields.attributes,
+				traceID:    tt.fields.traceID,
 			}
 			l.root = l
 
-			l.Debug(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantDebug {
-				t.Errorf("stdErrLogger.Debug() value = %v, wantValue %v", s, tt.wantDebug)
+			verifyLog := func(log, methodName, expectedPrefix string, expectedLvl slog.Level) {
+				if !strings.HasPrefix(log, expectedPrefix) {
+					t.Errorf("awsLogger.%s() = %q, missing prefix %q", methodName, log, expectedPrefix)
+				}
+
+				expectedVals := []string{
+					"trace_id=" + tt.fields.traceID,
+					"span_id=" + span.SpanContext().SpanID().String(),
+					"level=" + expectedLvl.String(),
+				}
+				for k, v := range tt.fields.attributes {
+					expectedVals = append(expectedVals, slog.Any(k, v).String())
+				}
+				for _, v := range expectedVals {
+					if !strings.Contains(log, v) {
+						t.Errorf("awsLogger.%s() = %q, missing: %q", methodName, log, v)
+					}
+				}
 			}
+
+			l.Debug(ctx, tt.args.v2)
+			verifyLog(buf.String(), "Debug", tt.wantDebug, slog.LevelDebug)
 			buf.Reset()
 
 			l.Debugf(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantDebugf {
-				t.Errorf("stdErrLogger.Debug() value = %v, wantValue %v", s, tt.wantDebugf)
-			}
+			verifyLog(buf.String(), "Debugf", tt.wantDebugf, slog.LevelDebug)
 			buf.Reset()
 
 			l.Info(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantInfo {
-				t.Errorf("stdErrLogger.Info() value = %v, wantValue %v", s, tt.wantInfo)
-			}
+			verifyLog(buf.String(), "Info", tt.wantInfo, slog.LevelInfo)
 			buf.Reset()
 
 			l.Infof(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantInfof {
-				t.Errorf("stdErrLogger.Info() value = %v, wantValue %v", s, tt.wantInfof)
-			}
+			verifyLog(buf.String(), "Infof", tt.wantInfof, slog.LevelInfo)
 			buf.Reset()
 
 			l.Warn(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantWarn {
-				t.Errorf("stdErrLogger.Warn() value = %v, wantValue %v", s, tt.wantWarn)
-			}
+			verifyLog(buf.String(), "Warn", tt.wantWarn, slog.LevelWarn)
 			buf.Reset()
 
 			l.Warnf(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantWarnf {
-				t.Errorf("stdErrLogger.Warn() value = %v, wantValue %v", s, tt.wantWarnf)
-			}
+			verifyLog(buf.String(), "Warnf", tt.wantWarnf, slog.LevelWarn)
 			buf.Reset()
 
 			l.Error(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantError {
-				t.Errorf("stdErrLogger.Error() value = %v, wantValue %v", s, tt.wantError)
-			}
+			verifyLog(buf.String(), "Error", tt.wantError, slog.LevelError)
 			buf.Reset()
 
 			l.Errorf(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantErrorf {
-				t.Errorf("stdErrLogger.Error() value = %v, wantValue %v", s, tt.wantErrorf)
-			}
+			verifyLog(buf.String(), "Errorf", tt.wantErrorf, slog.LevelError)
 			buf.Reset()
 		})
 	}
@@ -702,8 +721,8 @@ type testSlogger struct {
 	buf *bytes.Buffer
 }
 
-func (t *testSlogger) LogAttrs(_ context.Context, _ slog.Level, msg string, _ ...slog.Attr) {
-	_, _ = t.buf.WriteString(msg)
+func (t *testSlogger) LogAttrs(_ context.Context, level slog.Level, msg string, attrs ...slog.Attr) {
+	_, _ = fmt.Fprint(t.buf, msg, "level="+level.String(), attrs)
 }
 
 type captureSLogger struct {
