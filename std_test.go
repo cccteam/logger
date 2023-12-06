@@ -3,8 +3,10 @@ package logger
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -20,6 +22,7 @@ func Test_stdErrLogger(t *testing.T) {
 	tests := []struct {
 		name       string
 		args       args
+		attributes map[string]any
 		wantDebug  string
 		wantDebugf string
 		wantInfo   string
@@ -35,69 +38,71 @@ func Test_stdErrLogger(t *testing.T) {
 				v:  []any{"Message"},
 				v2: "Message",
 			},
-			wantDebug:  "DEBUG: Message\n",
-			wantDebugf: "DEBUG: Formatted Message\n",
-			wantInfo:   "INFO : Message\n",
-			wantInfof:  "INFO : Formatted Message\n",
-			wantWarn:   "WARN : Message\n",
-			wantWarnf:  "WARN : Formatted Message\n",
-			wantError:  "ERROR: Message\n",
-			wantErrorf: "ERROR: Formatted Message\n",
+			attributes: map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+			wantDebug:  "DEBUG: Message",
+			wantDebugf: "DEBUG: Formatted Message",
+			wantInfo:   "INFO : Message",
+			wantInfof:  "INFO : Formatted Message",
+			wantWarn:   "WARN : Message",
+			wantWarnf:  "WARN : Formatted Message",
+			wantError:  "ERROR: Message",
+			wantErrorf: "ERROR: Formatted Message",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
 
-			l := &stdErrLogger{}
+			l := &stdErrLogger{attributes: tt.attributes}
 			format := "Formatted %s"
 
-			l.Debug(ctx, tt.args.v2)
-			if s := buf.String()[20:]; s != tt.wantDebug {
-				t.Errorf("stdErrLogger.Debug() value = %v, wantValue %v", s, tt.wantDebug)
+			verifyLog := func(log, methodName, expectedPrefix string) {
+				if !strings.HasPrefix(log, expectedPrefix) {
+					t.Errorf("stdErrLogger.%s() = %q, missing prefix %q", methodName, log, expectedPrefix)
+				}
+
+				for k, v := range tt.attributes {
+					attrStr := fmt.Sprintf("%s=%v", k, v)
+					if !strings.Contains(log, attrStr) {
+						t.Errorf("stdErrLogger.%s() missing attribute %s", methodName, attrStr)
+					}
+				}
+
+				if !strings.HasSuffix(log, "\n") {
+					t.Errorf("stdErrLogger.%s() = %q, missing suffix \\n", methodName, log)
+				}
 			}
+
+			l.Debug(ctx, tt.args.v2)
+			verifyLog(buf.String()[20:], "Debug", tt.wantDebug)
 			buf.Reset()
 
 			l.Debugf(ctx, format, tt.args.v...)
-			if s := buf.String()[20:]; s != tt.wantDebugf {
-				t.Errorf("stdErrLogger.Debug() value = %v, wantValue %v", s, tt.wantDebugf)
-			}
+			verifyLog(buf.String()[20:], "Debugf", tt.wantDebugf)
 			buf.Reset()
 
 			l.Info(ctx, tt.args.v2)
-			if s := buf.String()[20:]; s != tt.wantInfo {
-				t.Errorf("stdErrLogger.Info() value = %v, wantValue %v", s, tt.wantInfo)
-			}
+			verifyLog(buf.String()[20:], "Info", tt.wantInfo)
 			buf.Reset()
 
 			l.Infof(ctx, format, tt.args.v...)
-			if s := buf.String()[20:]; s != tt.wantInfof {
-				t.Errorf("stdErrLogger.Info() value = %v, wantValue %v", s, tt.wantInfof)
-			}
+			verifyLog(buf.String()[20:], "Infof", tt.wantInfof)
 			buf.Reset()
 
 			l.Warn(ctx, tt.args.v2)
-			if s := buf.String()[20:]; s != tt.wantWarn {
-				t.Errorf("stdErrLogger.Warn() value = %v, wantValue %v", s, tt.wantWarn)
-			}
+			verifyLog(buf.String()[20:], "Warn", tt.wantWarn)
 			buf.Reset()
 
 			l.Warnf(ctx, format, tt.args.v...)
-			if s := buf.String()[20:]; s != tt.wantWarnf {
-				t.Errorf("stdErrLogger.Warn() value = %v, wantValue %v", s, tt.wantWarnf)
-			}
+			verifyLog(buf.String()[20:], "Warnf", tt.wantWarnf)
 			buf.Reset()
 
 			l.Error(ctx, tt.args.v2)
-			if s := buf.String()[20:]; s != tt.wantError {
-				t.Errorf("stdErrLogger.Error() value = %v, wantValue %v", s, tt.wantError)
-			}
+			verifyLog(buf.String()[20:], "Error", tt.wantError)
 			buf.Reset()
 
 			l.Errorf(ctx, format, tt.args.v...)
-			if s := buf.String()[20:]; s != tt.wantErrorf {
-				t.Errorf("stdErrLogger.Error() value = %v, wantValue %v", s, tt.wantErrorf)
-			}
+			verifyLog(buf.String()[20:], "Errorf", tt.wantErrorf)
 			buf.Reset()
 		})
 	}
