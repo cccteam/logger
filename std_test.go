@@ -196,3 +196,44 @@ func Test_stdAttributer_AddAttribute(t *testing.T) {
 		})
 	}
 }
+
+func Test_stdAttributer_Logger(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		logger     *stdErrLogger
+		attributes map[string]any
+	}
+	tests := []struct {
+		name string
+		fields
+		want *stdErrLogger
+	}{
+		{
+			name: "success getting logger",
+			fields: fields{
+				logger: &stdErrLogger{
+					attributes: map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+				},
+				attributes: map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
+			},
+			want: &stdErrLogger{
+				attributes: map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := &stdAttributer{
+				logger:     tt.fields.logger,
+				attributes: tt.fields.attributes,
+			}
+
+			got := a.Logger()
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(stdErrLogger{})); diff != "" {
+				t.Errorf("stdAttributer.Logger() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}

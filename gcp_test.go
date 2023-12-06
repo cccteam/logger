@@ -748,7 +748,7 @@ func Test_gcpAttributer_Logger(t *testing.T) {
 		want *gcpLogger
 	}{
 		{
-			name: "success",
+			name: "success getting logger",
 			fields: fields{
 				logger: &gcpLogger{
 					root: &gcpLogger{
