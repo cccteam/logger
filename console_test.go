@@ -3,6 +3,7 @@ package logger
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"cloud.google.com/go/logging"
@@ -199,19 +201,16 @@ func Test_consoleHandler_ServeHTTP(t *testing.T) {
 						default:
 						}
 
-						w.WriteHeader(tt.args.status)
-						handlerCalled = true
-
-						Req(r).AddRequestAttribute("test_key_1", "test_value_1")
-						Req(r).AddRequestAttribute("test_key_2", "test_value_2")
-
 						var ok bool
 						l, ok = Req(r).lg.(*consoleLogger)
 						if !ok {
-							t.Fatalf("Failed to get consoleLogger from request")
+							t.Fatal("Failed to get consoleLogger from request")
 						}
 						l.reqAttributes["test_key_1"] = "test_value_1"
 						l.reqAttributes["test_key_2"] = "test_value_2"
+
+						w.WriteHeader(tt.args.status)
+						handlerCalled = true
 					},
 				),
 			}
@@ -279,13 +278,17 @@ func TestNewConsoleLogger(t *testing.T) {
 
 func Test_consoleLogger(t *testing.T) {
 	type args struct {
-		v       []any
-		v2      any
-		noColor bool
+		v  []any
+		v2 any
+	}
+	type fields struct {
+		noColor    bool
+		attributes map[string]any
 	}
 	tests := []struct {
 		name       string
 		args       args
+		fields     fields
 		wantDebug  string
 		wantDebugf string
 		wantInfo   string
@@ -297,17 +300,19 @@ func Test_consoleLogger(t *testing.T) {
 	}{
 		{
 			name: "Test with color", args: args{v: []any{"Message"}, v2: "Message"},
-			wantDebug: "\x1b[37mDEBUG\x1b[0m: Message\n", wantDebugf: "\x1b[37mDEBUG\x1b[0m: Formatted Message\n",
-			wantInfo: "\x1b[34mINFO \x1b[0m: Message\n", wantInfof: "\x1b[34mINFO \x1b[0m: Formatted Message\n",
-			wantWarn: "\x1b[33mWARN \x1b[0m: Message\n", wantWarnf: "\x1b[33mWARN \x1b[0m: Formatted Message\n",
-			wantError: "\x1b[31mERROR\x1b[0m: Message\n", wantErrorf: "\x1b[31mERROR\x1b[0m: Formatted Message\n",
+			fields:    fields{attributes: map[string]any{"a test key": "a test value"}},
+			wantDebug: "\x1b[37mDEBUG\x1b[0m: Message", wantDebugf: "\x1b[37mDEBUG\x1b[0m: Formatted Message",
+			wantInfo: "\x1b[34mINFO \x1b[0m: Message", wantInfof: "\x1b[34mINFO \x1b[0m: Formatted Message",
+			wantWarn: "\x1b[33mWARN \x1b[0m: Message", wantWarnf: "\x1b[33mWARN \x1b[0m: Formatted Message",
+			wantError: "\x1b[31mERROR\x1b[0m: Message", wantErrorf: "\x1b[31mERROR\x1b[0m: Formatted Message",
 		},
 		{
-			name: "Test no color", args: args{v: []any{"Message"}, v2: "Message", noColor: true},
-			wantDebug: "DEBUG: Message\n", wantDebugf: "DEBUG: Formatted Message\n",
-			wantInfo: "INFO : Message\n", wantInfof: "INFO : Formatted Message\n",
-			wantWarn: "WARN : Message\n", wantWarnf: "WARN : Formatted Message\n",
-			wantError: "ERROR: Message\n", wantErrorf: "ERROR: Formatted Message\n",
+			name: "Test no color", args: args{v: []any{"Message"}, v2: "Message"},
+			fields:    fields{noColor: true, attributes: map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"}},
+			wantDebug: "DEBUG: Message", wantDebugf: "DEBUG: Formatted Message",
+			wantInfo: "INFO : Message", wantInfof: "INFO : Formatted Message",
+			wantWarn: "WARN : Message", wantWarnf: "WARN : Formatted Message",
+			wantError: "ERROR: Message", wantErrorf: "ERROR: Formatted Message",
 		},
 	}
 	for _, tt := range tests {
@@ -318,56 +323,57 @@ func Test_consoleLogger(t *testing.T) {
 			t.Cleanup(func() { log.SetOutput(os.Stderr) })
 
 			u, _ := url.Parse("http://some.domain.com/path")
-			l := &consoleLogger{r: &http.Request{Method: http.MethodGet, URL: u}, noColor: tt.args.noColor}
+			l := &consoleLogger{r: &http.Request{Method: http.MethodGet, URL: u}, noColor: tt.fields.noColor, attributes: tt.fields.attributes}
 			l.root = l
 			format := "Formatted %s"
 
-			l.Debug(ctx, tt.args.v2)
-			if s := buf.String(); s[20:] != tt.wantDebug {
-				t.Errorf("stdErrLogger.Debug() value = %v, wantValue %v", s[20:], tt.wantDebug)
+			verifyLog := func(log, methodName, expectedPrefix string) {
+				if !strings.HasPrefix(log, expectedPrefix) {
+					t.Errorf("consoleLogger.%s() = %q, missing prefix %q", methodName, log, expectedPrefix)
+				}
+
+				for k, v := range tt.fields.attributes {
+					attrStr := fmt.Sprintf("%s=%v", k, v)
+					if !strings.Contains(log, attrStr) {
+						t.Errorf("consoleLogger.%s() missing attribute %s", methodName, attrStr)
+					}
+				}
+
+				if !strings.HasSuffix(log, "\n") {
+					t.Errorf("consoleLogger.%s() = %q, missing suffix \\n", methodName, log)
+				}
 			}
+
+			l.Debug(ctx, tt.args.v2)
+			verifyLog(buf.String()[20:], "Debug", tt.wantDebug)
 			buf.Reset()
 
 			l.Debugf(ctx, format, tt.args.v...)
-			if s := buf.String(); s[20:] != tt.wantDebugf {
-				t.Errorf("stdErrLogger.Debug() value = %v, wantValue %v", s[20:], tt.wantDebugf)
-			}
+			verifyLog(buf.String()[20:], "Debugf", tt.wantDebugf)
 			buf.Reset()
 
 			l.Info(ctx, tt.args.v2)
-			if s := buf.String(); s[20:] != tt.wantInfo {
-				t.Errorf("stdErrLogger.Info() value = %v, wantValue %v", s[20:], tt.wantInfo)
-			}
+			verifyLog(buf.String()[20:], "Info", tt.wantInfo)
 			buf.Reset()
 
 			l.Infof(ctx, format, tt.args.v...)
-			if s := buf.String(); s[20:] != tt.wantInfof {
-				t.Errorf("stdErrLogger.Info() value = %v, wantValue %v", s[20:], tt.wantInfof)
-			}
+			verifyLog(buf.String()[20:], "Infof", tt.wantInfof)
 			buf.Reset()
 
 			l.Warn(ctx, tt.args.v2)
-			if s := buf.String(); s[20:] != tt.wantWarn {
-				t.Errorf("stdErrLogger.Warn() value = %v, wantValue %v", s[20:], tt.wantWarn)
-			}
+			verifyLog(buf.String()[20:], "Warn", tt.wantWarn)
 			buf.Reset()
 
 			l.Warnf(ctx, format, tt.args.v...)
-			if s := buf.String(); s[20:] != tt.wantWarnf {
-				t.Errorf("stdErrLogger.Warn() value = %v, wantValue %v", s[20:], tt.wantWarnf)
-			}
+			verifyLog(buf.String()[20:], "Warnf", tt.wantWarnf)
 			buf.Reset()
 
 			l.Error(ctx, tt.args.v2)
-			if s := buf.String(); s[20:] != tt.wantError {
-				t.Errorf("stdErrLogger.Error() value = %v, wantValue %v", s[20:], tt.wantError)
-			}
+			verifyLog(buf.String()[20:], "Error", tt.wantError)
 			buf.Reset()
 
 			l.Errorf(ctx, format, tt.args.v...)
-			if s := buf.String(); s[20:] != tt.wantErrorf {
-				t.Errorf("stdErrLogger.Error() value = %v, wantValue %v", s[20:], tt.wantErrorf)
-			}
+			verifyLog(buf.String()[20:], "Errorf", tt.wantErrorf)
 			buf.Reset()
 		})
 	}
