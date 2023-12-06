@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 )
@@ -33,14 +34,14 @@ func TestLogger(t *testing.T) {
 				v:  []any{"Message"},
 				v2: "Message",
 			},
-			wantDebug:  "Message",
-			wantDebugf: "Formatted Message",
-			wantInfo:   "Message",
-			wantInfof:  "Formatted Message",
-			wantWarn:   "Message",
-			wantWarnf:  "Formatted Message",
-			wantError:  "Message",
-			wantErrorf: "Formatted Message",
+			wantDebug:  "Debug: Message, testCtxValue",
+			wantDebugf: "Debugf: Formatted Message, testCtxValue",
+			wantInfo:   "Info: Message, testCtxValue",
+			wantInfof:  "Infof: Formatted Message, testCtxValue",
+			wantWarn:   "Warn: Message, testCtxValue",
+			wantWarnf:  "Warnf: Formatted Message, testCtxValue",
+			wantError:  "Error: Message, testCtxValue",
+			wantErrorf: "Errorf: Formatted Message, testCtxValue",
 		},
 		{
 			name: "String & Error",
@@ -48,14 +49,14 @@ func TestLogger(t *testing.T) {
 				v:  []any{"Message"},
 				v2: errors.New("Message"),
 			},
-			wantDebug:  "Message",
-			wantDebugf: "Formatted Message",
-			wantInfo:   "Message",
-			wantInfof:  "Formatted Message",
-			wantWarn:   "Message",
-			wantWarnf:  "Formatted Message",
-			wantError:  "Message",
-			wantErrorf: "Formatted Message",
+			wantDebug:  "Debug: Message, testCtxValue",
+			wantDebugf: "Debugf: Formatted Message, testCtxValue",
+			wantInfo:   "Info: Message, testCtxValue",
+			wantInfof:  "Infof: Formatted Message, testCtxValue",
+			wantWarn:   "Warn: Message, testCtxValue",
+			wantWarnf:  "Warnf: Formatted Message, testCtxValue",
+			wantError:  "Error: Message, testCtxValue",
+			wantErrorf: "Errorf: Formatted Message, testCtxValue",
 		},
 	}
 	for _, tt := range tests {
@@ -64,13 +65,8 @@ func TestLogger(t *testing.T) {
 			t.Parallel()
 
 			var buf bytes.Buffer
-			logger := &gcpLogger{
-				logger: &testLogger{
-					buf: &buf,
-				},
-			}
-			logger.root = logger
-			ctx := newContext(context.Background(), logger)
+			l := &testCtxLogger{buf: &buf}
+			ctx := newContext(context.WithValue(context.Background(), l, " testCtxValue"), l)
 
 			r := &http.Request{}
 			r = r.WithContext(ctx)
@@ -80,52 +76,108 @@ func TestLogger(t *testing.T) {
 
 				l.Debug(tt.args.v2)
 				if s := buf.String(); s != tt.wantDebug {
-					t.Errorf("Logger.Debug() value = %v, wantValue %v", s, tt.wantDebug)
+					t.Errorf("Logger.Debug() = %q, wantValue %q", s, tt.wantDebug)
 				}
 				buf.Reset()
 
 				l.Debugf(format, tt.args.v...)
 				if s := buf.String(); s != tt.wantDebugf {
-					t.Errorf("Logger.Debugf() value = %v, wantValue %v", s, tt.wantDebugf)
+					t.Errorf("Logger.Debugf() = %q, wantValue %q", s, tt.wantDebugf)
 				}
 				buf.Reset()
 
 				l.Info(tt.args.v2)
 				if s := buf.String(); s != tt.wantInfo {
-					t.Errorf("Logger.Info() value = %v, wantValue %v", s, tt.wantInfo)
+					t.Errorf("Logger.Info() = %q, wantValue %q", s, tt.wantInfo)
 				}
 				buf.Reset()
 
 				l.Infof(format, tt.args.v...)
 				if s := buf.String(); s != tt.wantInfof {
-					t.Errorf("Logger.Infof() value = %v, wantValue %v", s, tt.wantInfof)
+					t.Errorf("Logger.Infof() = %q, wantValue %q", s, tt.wantInfof)
 				}
 				buf.Reset()
 
 				l.Warn(tt.args.v2)
 				if s := buf.String(); s != tt.wantWarn {
-					t.Errorf("Logger.Warn() value = %v, wantValue %v", s, tt.wantWarn)
+					t.Errorf("Logger.Warn() = %q, wantValue %q", s, tt.wantWarn)
 				}
 				buf.Reset()
 
 				l.Warnf(format, tt.args.v...)
 				if s := buf.String(); s != tt.wantWarnf {
-					t.Errorf("Logger.Warnf() value = %v, wantValue %v", s, tt.wantWarnf)
+					t.Errorf("Logger.Warnf() = %q, wantValue %q", s, tt.wantWarnf)
 				}
 				buf.Reset()
 
 				l.Error(tt.args.v2)
 				if s := buf.String(); s != tt.wantError {
-					t.Errorf("Logger.Error() value = %v, wantValue %v", s, tt.wantError)
+					t.Errorf("Logger.Error() = %q, wantValue %q", s, tt.wantError)
 				}
 				buf.Reset()
 
 				l.Errorf(format, tt.args.v...)
 				if s := buf.String(); s != tt.wantErrorf {
-					t.Errorf("Logger.Errorf() value = %v, wantValue %v", s, tt.wantErrorf)
+					t.Errorf("Logger.Errorf() = %q, wantValue %q", s, tt.wantErrorf)
 				}
 				buf.Reset()
 			}
 		})
 	}
+}
+
+var _ ctxLogger = &testCtxLogger{}
+
+type testCtxLogger struct {
+	buf *bytes.Buffer
+}
+
+func (l *testCtxLogger) Debug(ctx context.Context, v any) {
+	l.buf.WriteString("Debug: " + fmt.Sprint(v) + "," + fmt.Sprint(ctx.Value(l)))
+}
+
+func (l *testCtxLogger) Debugf(ctx context.Context, format string, v ...any) {
+	l.buf.WriteString("Debugf: " + fmt.Sprintf(format, v...) + "," + fmt.Sprint(ctx.Value(l)))
+}
+
+func (l *testCtxLogger) Info(ctx context.Context, v any) {
+	l.buf.WriteString("Info: " + fmt.Sprint(v) + "," + fmt.Sprint(ctx.Value(l)))
+}
+
+func (l *testCtxLogger) Infof(ctx context.Context, format string, v ...any) {
+	l.buf.WriteString("Infof: " + fmt.Sprintf(format, v...) + "," + fmt.Sprint(ctx.Value(l)))
+}
+
+func (l *testCtxLogger) Warn(ctx context.Context, v any) {
+	l.buf.WriteString("Warn: " + fmt.Sprint(v) + "," + fmt.Sprint(ctx.Value(l)))
+}
+
+func (l *testCtxLogger) Warnf(ctx context.Context, format string, v ...any) {
+	l.buf.WriteString("Warnf: " + fmt.Sprintf(format, v...) + "," + fmt.Sprint(ctx.Value(l)))
+}
+
+func (l *testCtxLogger) Error(ctx context.Context, v any) {
+	l.buf.WriteString("Error: " + fmt.Sprint(v) + "," + fmt.Sprint(ctx.Value(l)))
+}
+
+func (l *testCtxLogger) Errorf(ctx context.Context, format string, v ...any) {
+	l.buf.WriteString("Errorf: " + fmt.Sprintf(format, v...) + "," + fmt.Sprint(ctx.Value(l)))
+}
+
+func (l *testCtxLogger) AddRequestAttribute(_ string, _ any) {}
+
+func (l *testCtxLogger) WithAttributes() attributer {
+	return &testAttributer{logger: l}
+}
+
+var _ attributer = &testAttributer{}
+
+type testAttributer struct {
+	logger *testCtxLogger
+}
+
+func (a *testAttributer) AddAttribute(_ string, _ any) {}
+
+func (a *testAttributer) Logger() ctxLogger {
+	return a.logger
 }
