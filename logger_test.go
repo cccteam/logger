@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"testing"
 )
 
@@ -126,10 +127,67 @@ func TestLogger(t *testing.T) {
 	}
 }
 
+func TestLogger_AddRequestAttribute(t *testing.T) {
+	t.Parallel()
+	type args struct {
+		key   string
+		value any
+	}
+	tests := []struct {
+		name string
+		args args
+		want *Logger
+	}{
+		{
+			name: "success add request attribute",
+			args: args{
+				key:   "new_req_key",
+				value: "new_req_value",
+			},
+			want: &Logger{
+				lg: &testCtxLogger{
+					reqAttributes: map[string]any{
+						"existing_req_key_1": "existing_req_value_1",
+						"existing_req_key_2": "existing_req_value_2",
+						"new_req_key":        "new_req_value",
+					},
+					attributes: map[string]any{
+						"existing_key_1": "existing_value_1",
+						"existing_key_2": "existing_value_2",
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := &Logger{
+				lg: &testCtxLogger{
+					reqAttributes: map[string]any{
+						"existing_req_key_1": "existing_req_value_1",
+						"existing_req_key_2": "existing_req_value_2",
+					},
+					attributes: map[string]any{
+						"existing_key_1": "existing_value_1",
+						"existing_key_2": "existing_value_2",
+					},
+				},
+			}
+			if got := l.AddRequestAttribute(tt.args.key, tt.args.value); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Logger.AddRequestAttribute() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 var _ ctxLogger = &testCtxLogger{}
 
 type testCtxLogger struct {
-	buf *bytes.Buffer
+	buf           *bytes.Buffer
+	reqAttributes map[string]any
+	attributes    map[string]any
 }
 
 func (l *testCtxLogger) Debug(ctx context.Context, v any) {
@@ -164,20 +222,38 @@ func (l *testCtxLogger) Errorf(ctx context.Context, format string, v ...any) {
 	l.buf.WriteString("Errorf: " + fmt.Sprintf(format, v...) + "," + fmt.Sprint(ctx.Value(l)))
 }
 
-func (l *testCtxLogger) AddRequestAttribute(_ string, _ any) {}
+func (l *testCtxLogger) AddRequestAttribute(key string, value any) {
+	l.reqAttributes[key] = value
+}
 
 func (l *testCtxLogger) WithAttributes() attributer {
-	return &testAttributer{logger: l}
+	attributes := make(map[string]any)
+	for k, v := range l.reqAttributes {
+		attributes[k] = v
+	}
+	return &testAttributer{logger: l, attributes: attributes}
 }
 
 var _ attributer = &testAttributer{}
 
 type testAttributer struct {
-	logger *testCtxLogger
+	logger     *testCtxLogger
+	attributes map[string]any
 }
 
-func (a *testAttributer) AddAttribute(_ string, _ any) {}
+func (a *testAttributer) AddAttribute(key string, value any) {
+	a.attributes[key] = value
+}
 
 func (a *testAttributer) Logger() ctxLogger {
-	return a.logger
+	attributes := make(map[string]any)
+	for k, v := range a.attributes {
+		attributes[k] = v
+	}
+
+	return &testCtxLogger{
+		buf:           a.logger.buf,
+		reqAttributes: nil,
+		attributes:    attributes,
+	}
 }
