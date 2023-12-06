@@ -597,3 +597,69 @@ func Test_consoleAttributer_AddAttribute(t *testing.T) {
 		})
 	}
 }
+
+func Test_consoleAttributer_Logger(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		logger     *consoleLogger
+		attributes map[string]any
+	}
+	tests := []struct {
+		name string
+		fields
+		want *consoleLogger
+	}{
+		{
+			name: "success",
+			fields: fields{
+				logger: &consoleLogger{
+					root: &consoleLogger{
+						logCount: 123,
+					},
+					r:             httptest.NewRequest(http.MethodGet, "/test/url", http.NoBody),
+					noColor:       true,
+					rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
+					attributes:    map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+					maxSeverity:   logging.Warning,
+					logCount:      456,
+					reqAttributes: map[string]any{"test_req_key_1": "test_req_value_1", "test_req_key_2": "test_req_value_2"},
+				},
+				attributes: map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
+			},
+			want: &consoleLogger{
+				root: &consoleLogger{
+					logCount: 123,
+				},
+				noColor:       true,
+				rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
+				attributes:    map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
+				maxSeverity:   logging.Debug,
+				logCount:      0,
+				reqAttributes: nil,
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := &consoleAttributer{
+				logger:     tt.fields.logger,
+				attributes: tt.fields.attributes,
+			}
+
+			got := a.Logger()
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(consoleLogger{}), cmpopts.IgnoreFields(consoleLogger{}, "mu", "r")); diff != "" {
+				t.Errorf("consoleAttributer.Logger() mismatch (-want +got):\n%s", diff)
+			}
+			gotConsoleLogger, ok := got.(*consoleLogger)
+			if !ok {
+				t.Errorf("consoleAttributer.Logger() type %T, want %T", got, &consoleLogger{})
+				return
+			}
+			if gotConsoleLogger.r != a.logger.r {
+				t.Error("consoleAttributer.Logger().r is NOT the original request")
+			}
+		})
+	}
+}
