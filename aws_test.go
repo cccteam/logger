@@ -717,6 +717,74 @@ func Test_awsAttributer_AddAttribute(t *testing.T) {
 	}
 }
 
+func Test_awsAttributer_Logger(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		logger     *awsLogger
+		attributes map[string]any
+	}
+	tests := []struct {
+		name string
+		fields
+		want *awsLogger
+	}{
+		{
+			name: "success getting logger",
+			fields: fields{
+				logger: &awsLogger{
+					root: &awsLogger{
+						traceID: "root trace id",
+					},
+					logger:        &testSlogger{},
+					traceID:       "1234567890",
+					rsvdKeys:      []string{"test reserved key 1", "test reserved key 2"},
+					rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
+					attributes:    map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+					maxLevel:      slog.LevelWarn,
+					logCount:      2,
+					reqAttributes: map[string]any{"test_req_key_1": "test_req_value_1", "test_req_key_2": "test_req_value_2"},
+				},
+				attributes: map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
+			},
+			want: &awsLogger{
+				root: &awsLogger{
+					traceID: "root trace id",
+				},
+				traceID:       "1234567890",
+				rsvdKeys:      []string{"test reserved key 1", "test reserved key 2"},
+				rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
+				attributes:    map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
+				maxLevel:      slog.LevelInfo,
+				logCount:      0,
+				reqAttributes: nil,
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := &awsAttributer{
+				logger:     tt.fields.logger,
+				attributes: tt.fields.attributes,
+			}
+
+			got := a.Logger()
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(awsLogger{}), cmpopts.IgnoreFields(awsLogger{}, "mu", "logger")); diff != "" {
+				t.Errorf("awsAttributer.Logger() mismatch (-want +got):\n%s", diff)
+			}
+			gotAwsLogger, ok := got.(*awsLogger)
+			if !ok {
+				t.Errorf("awsAttributer.Logger() type %T, want %T", got, &awsLogger{})
+				return
+			}
+			if gotAwsLogger.logger != a.logger.logger {
+				t.Errorf("got awsLogger.logger is NOT the original logger")
+			}
+		})
+	}
+}
+
 type testSlogger struct {
 	buf *bytes.Buffer
 }
