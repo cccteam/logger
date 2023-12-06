@@ -268,6 +268,34 @@ func TestAttributerLogger_AddAttribute(t *testing.T) {
 	}
 }
 
+func TestAttributerLogger_Logger(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+	}{
+		{
+			name: "success getting Logger",
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := &AttributerLogger{
+				logger:     &Logger{ctx: context.Background()},
+				attributer: &testAttributer{},
+			}
+			got := a.Logger()
+			if got.ctx != a.logger.ctx {
+				t.Error("AttributerLogger.Logger().ctx NOT equal to original logger ctx")
+			}
+			if _, ok := got.lg.(*testCtxLogger); !ok {
+				t.Errorf("AttributerLogger.Logger().lg type %T, want %T", got.lg, &testCtxLogger{})
+			}
+		})
+	}
+}
+
 var _ ctxLogger = &testCtxLogger{}
 
 type testCtxLogger struct {
