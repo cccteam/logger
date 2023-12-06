@@ -8,6 +8,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func Test_stdErrLogger(t *testing.T) {
@@ -104,6 +107,47 @@ func Test_stdErrLogger(t *testing.T) {
 			l.Errorf(ctx, format, tt.args.v...)
 			verifyLog(buf.String()[20:], "Errorf", tt.wantErrorf)
 			buf.Reset()
+		})
+	}
+}
+
+func Test_stdErrLogger_WithAttributes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		attributes map[string]any
+		want       *stdAttributer
+	}{
+		{
+			name: "with attributes success",
+			attributes: map[string]any{
+				"test_key_1": "test_value_1",
+				"test_key_2": "test_value_2",
+			},
+			want: &stdAttributer{
+				attributes: map[string]any{
+					"test_key_1": "test_value_1",
+					"test_key_2": "test_value_2",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := &stdErrLogger{
+				attributes: tt.attributes,
+			}
+			got := l.WithAttributes()
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(stdAttributer{}), cmpopts.IgnoreFields(stdAttributer{}, "logger")); diff != "" {
+				t.Errorf("stdErrLogger.WithAttributes() mismatch (-want +got):\n%s", diff)
+			}
+			if a, ok := got.(*stdAttributer); !ok {
+				t.Errorf("stdErrLogger.WithAttributes() type %T, want %T", got, &stdAttributer{})
+			} else if a.logger != l {
+				t.Errorf("stdErrLogger.WithAttributes().logger != stdErrLogger")
+			}
 		})
 	}
 }
