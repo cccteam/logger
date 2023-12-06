@@ -809,6 +809,72 @@ func Test_gcpAttributer_AddAttribute(t *testing.T) {
 	}
 }
 
+func Test_gcpAttributer_Logger(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		logger     *gcpLogger
+		attributes map[string]any
+	}
+	tests := []struct {
+		name string
+		fields
+		want *gcpLogger
+	}{
+		{
+			name: "success",
+			fields: fields{
+				logger: &gcpLogger{
+					root: &gcpLogger{
+						traceID: "root trace id",
+					},
+					logger:        &testLogger{},
+					traceID:       "1234567890",
+					rsvdKeys:      []string{"test reserved key 1", "test reserved key 2"},
+					attributes:    map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+					maxSeverity:   logging.Warning,
+					logCount:      2,
+					reqAttributes: map[string]any{"test_req_key_1": "test_req_value_1", "test_req_key_2": "test_req_value_2"},
+				},
+				attributes: map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
+			},
+			want: &gcpLogger{
+				root: &gcpLogger{
+					traceID: "root trace id",
+				},
+				traceID:       "1234567890",
+				rsvdKeys:      []string{"test reserved key 1", "test reserved key 2"},
+				attributes:    map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
+				maxSeverity:   logging.Default,
+				logCount:      0,
+				reqAttributes: nil,
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := &gcpAttributer{
+				logger:     tt.fields.logger,
+				attributes: tt.fields.attributes,
+			}
+
+			got := a.Logger()
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(gcpLogger{}), cmpopts.IgnoreFields(gcpLogger{}, "mu", "logger")); diff != "" {
+				t.Errorf("gcpAttributer.Logger() mismatch (-want +got):\n%s", diff)
+			}
+			gotGcpLogger, ok := got.(*gcpLogger)
+			if !ok {
+				t.Errorf("gcpAttributer.Logger() type %T, want %T", got, &gcpLogger{})
+				return
+			}
+			if gotGcpLogger.logger != a.logger.logger {
+				t.Errorf("got gcpLogger.logger is NOT the original logger")
+			}
+		})
+	}
+}
+
 func disableMetaServertest(t *testing.T) {
 	t.Helper()
 
