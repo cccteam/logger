@@ -227,6 +227,8 @@ func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
 	l.logger.LogAttrs(ctx, level, message, attr...)
 }
 
+var _ attributer = (*awsAttributer)(nil)
+
 type awsAttributer struct {
 	logger     *awsLogger
 	attributes map[string]any

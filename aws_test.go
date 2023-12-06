@@ -634,6 +634,70 @@ func Test_awsLogger_WithAttributes(t *testing.T) {
 	}
 }
 
+func Test_awsAttributer_AddAttribute(t *testing.T) {
+	t.Parallel()
+	type args struct {
+		key   string
+		value any
+	}
+	tests := []struct {
+		name       string
+		args       args
+		rsvdKeys   []string
+		attributes map[string]any
+		want       map[string]any
+	}{
+		{
+			name: "success prefixing reserved key",
+			args: args{
+				key:   "test_key_0",
+				value: "test_value_0",
+			},
+			rsvdKeys: []string{"test_key 0", "test_key_0"},
+			attributes: map[string]any{
+				"test_key_1": "test_value_1",
+				"test_key_2": "test_value_2",
+			},
+			want: map[string]any{
+				"test_key_1":        "test_value_1",
+				"test_key_2":        "test_value_2",
+				"custom_test_key_0": "test_value_0",
+			},
+		},
+		{
+			name: "success adding attribute (non-reserved key)",
+			args: args{
+				key:   "test_key_0",
+				value: "test_value_0",
+			},
+			rsvdKeys: []string{"test_key 0"},
+			attributes: map[string]any{
+				"test_key_1": "test_value_1",
+				"test_key_2": "test_value_2",
+			},
+			want: map[string]any{
+				"test_key_1": "test_value_1",
+				"test_key_2": "test_value_2",
+				"test_key_0": "test_value_0",
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := &awsAttributer{
+				attributes: tt.attributes,
+				logger:     &awsLogger{rsvdKeys: tt.rsvdKeys},
+			}
+			a.AddAttribute(tt.args.key, tt.args.value)
+			if diff := cmp.Diff(a.attributes, tt.want); diff != "" {
+				t.Errorf("awsAttributer.AddAttribute() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 type testSlogger struct {
 	buf *bytes.Buffer
 }

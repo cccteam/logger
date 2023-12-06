@@ -218,6 +218,8 @@ func (l *consoleLogger) colorPrint(level logging.Severity, c color) string {
 	return fmt.Sprintf("%s%-5s%s", string([]byte{0x1b, '[', byte('0' + c/10), byte('0' + c%10), 'm'}), strLevel, "\x1b[0m")
 }
 
+var _ attributer = (*consoleAttributer)(nil)
+
 type consoleAttributer struct {
 	logger     *consoleLogger
 	attributes map[string]any

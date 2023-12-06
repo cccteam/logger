@@ -262,6 +262,8 @@ func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, msg any)
 	)
 }
 
+var _ attributer = (*gcpAttributer)(nil)
+
 type gcpAttributer struct {
 	logger     *gcpLogger
 	attributes map[string]any
