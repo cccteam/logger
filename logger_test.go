@@ -139,7 +139,7 @@ func TestLogger_AddRequestAttribute(t *testing.T) {
 		want *Logger
 	}{
 		{
-			name: "success add request attribute",
+			name: "success adding request attribute",
 			args: args{
 				key:   "new_req_key",
 				value: "new_req_value",
@@ -177,6 +177,32 @@ func TestLogger_AddRequestAttribute(t *testing.T) {
 			}
 			if got := l.AddRequestAttribute(tt.args.key, tt.args.value); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Logger.AddRequestAttribute() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLogger_WithAttributes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		want *AttributerLogger
+	}{
+		{
+			name: "Logger with attributes success",
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := &Logger{lg: &testCtxLogger{}}
+			got := l.WithAttributes()
+			if got.logger != l {
+				t.Errorf("Logger.WithAttributes() = %v, want %v", got.logger, l)
+			}
+			if _, ok := got.attributer.(*testAttributer); !ok {
+				t.Errorf("Logger.WithAttributes().attributer type %T, want %T", got.attributer, &testAttributer{})
 			}
 		})
 	}
@@ -227,17 +253,12 @@ func (l *testCtxLogger) AddRequestAttribute(key string, value any) {
 }
 
 func (l *testCtxLogger) WithAttributes() attributer {
-	attributes := make(map[string]any)
-	for k, v := range l.reqAttributes {
-		attributes[k] = v
-	}
-	return &testAttributer{logger: l, attributes: attributes}
+	return &testAttributer{}
 }
 
 var _ attributer = &testAttributer{}
 
 type testAttributer struct {
-	logger     *testCtxLogger
 	attributes map[string]any
 }
 
@@ -246,14 +267,5 @@ func (a *testAttributer) AddAttribute(key string, value any) {
 }
 
 func (a *testAttributer) Logger() ctxLogger {
-	attributes := make(map[string]any)
-	for k, v := range a.attributes {
-		attributes[k] = v
-	}
-
-	return &testCtxLogger{
-		buf:           a.logger.buf,
-		reqAttributes: nil,
-		attributes:    attributes,
-	}
+	return &testCtxLogger{}
 }
