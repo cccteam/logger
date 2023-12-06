@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 
 	"cloud.google.com/go/logging"
@@ -265,18 +268,16 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 							}
 						}
 
-						l, ok := Req(r).lg.(*gcpLogger)
-						if ok {
-							traceID = l.traceID
-						} else {
-							t.Fatalf("Req() = %v, wanted: %T", l, &gcpLogger{})
+						gcpLgr, ok := Req(r).lg.(*gcpLogger)
+						if !ok {
+							t.Fatalf("Req() = %v, wanted: %T", gcpLgr, &gcpLogger{})
 						}
+						traceID = gcpLgr.traceID
+						gcpLgr.reqAttributes["test_key_1"] = "test_value_1"
+						gcpLgr.reqAttributes["test_key_2"] = "test_value_2"
 
 						w.WriteHeader(tt.args.status)
 						handlerCalled = true
-
-						l.reqAttributes["test_key_1"] = "test_value_1"
-						l.reqAttributes["test_key_2"] = "test_value_2"
 					},
 				),
 			}
@@ -436,6 +437,10 @@ func Test_newGCPLogger(t *testing.T) {
 func Test_gcpLogger(t *testing.T) {
 	t.Parallel()
 
+	type fields struct {
+		attributes map[string]any
+		traceID    string
+	}
 	type args struct {
 		format string
 		v      []any
@@ -443,6 +448,7 @@ func Test_gcpLogger(t *testing.T) {
 	}
 	tests := []struct {
 		name       string
+		fields     fields
 		args       args
 		wantDebug  string
 		wantDebugf string
@@ -455,6 +461,10 @@ func Test_gcpLogger(t *testing.T) {
 	}{
 		{
 			name: "Strings",
+			fields: fields{
+				attributes: map[string]any{"a test key": "a test value"},
+				traceID:    "123987",
+			},
 			args: args{
 				format: "Formatted %s",
 				v:      []any{"Message"},
@@ -471,6 +481,10 @@ func Test_gcpLogger(t *testing.T) {
 		},
 		{
 			name: "String & Error",
+			fields: fields{
+				attributes: map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+				traceID:    "987123",
+			},
 			args: args{
 				format: "Formatted %s",
 				v:      []any{"Message"},
@@ -491,62 +505,66 @@ func Test_gcpLogger(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
+			ctx, span := otel.Tracer("test tracer").Start(context.Background(), "a test")
 			var buf bytes.Buffer
 
 			l := &gcpLogger{
 				logger: &testLogger{
 					buf: &buf,
 				},
+				attributes: tt.fields.attributes,
+				traceID:    tt.fields.traceID,
 			}
 			l.root = l
 
-			l.Debug(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantDebug {
-				t.Errorf("stdErrLogger.Debug() value = %v, wantValue %v", s, tt.wantDebug)
+			verifyOutput := func(output, methodName, expectedMsgVal string, expectedSeverity logging.Severity) {
+				expectedVals := []string{
+					"message=" + expectedMsgVal,
+					"trace=" + tt.fields.traceID,
+					"severity=" + expectedSeverity.String(),
+					"span=" + span.SpanContext().SpanID().String(),
+					"trace_sampled=" + fmt.Sprint(span.SpanContext().IsSampled()),
+				}
+				for k, v := range tt.fields.attributes {
+					expectedVals = append(expectedVals, slog.Any(k, v).String())
+				}
+				for _, v := range expectedVals {
+					if !strings.Contains(output, v) {
+						t.Errorf("gcpLogger.%s() = %q, missing: %q", methodName, output, v)
+					}
+				}
 			}
+
+			l.Debug(ctx, tt.args.v2)
+			verifyOutput(buf.String(), "Debug", tt.wantDebug, logging.Debug)
 			buf.Reset()
 
 			l.Debugf(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantDebugf {
-				t.Errorf("stdErrLogger.Debug() value = %v, wantValue %v", s, tt.wantDebugf)
-			}
+			verifyOutput(buf.String(), "Debugf", tt.wantDebugf, logging.Debug)
 			buf.Reset()
 
 			l.Info(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantInfo {
-				t.Errorf("stdErrLogger.Info() value = %v, wantValue %v", s, tt.wantInfo)
-			}
+			verifyOutput(buf.String(), "Info", tt.wantInfo, logging.Info)
 			buf.Reset()
 
 			l.Infof(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantInfof {
-				t.Errorf("stdErrLogger.Info() value = %v, wantValue %v", s, tt.wantInfof)
-			}
+			verifyOutput(buf.String(), "Infof", tt.wantInfof, logging.Info)
 			buf.Reset()
 
 			l.Warn(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantWarn {
-				t.Errorf("stdErrLogger.Warn() value = %v, wantValue %v", s, tt.wantWarn)
-			}
+			verifyOutput(buf.String(), "Warn", tt.wantWarn, logging.Warning)
 			buf.Reset()
 
 			l.Warnf(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantWarnf {
-				t.Errorf("stdErrLogger.Warn() value = %v, wantValue %v", s, tt.wantWarnf)
-			}
+			verifyOutput(buf.String(), "Warnf", tt.wantWarnf, logging.Warning)
 			buf.Reset()
 
 			l.Error(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantError {
-				t.Errorf("stdErrLogger.Error() value = %v, wantValue %v", s, tt.wantError)
-			}
+			verifyOutput(buf.String(), "Error", tt.wantError, logging.Error)
 			buf.Reset()
 
 			l.Errorf(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantErrorf {
-				t.Errorf("stdErrLogger.Error() value = %v, wantValue %v", s, tt.wantErrorf)
-			}
+			verifyOutput(buf.String(), "Errorf", tt.wantErrorf, logging.Error)
 			buf.Reset()
 		})
 	}
@@ -808,7 +826,17 @@ type testLogger struct {
 }
 
 func (t *testLogger) Log(e logging.Entry) {
-	_, _ = t.buf.WriteString(e.Payload.(map[string]any)["message"].(string))
+	logStr := "trace=" + e.Trace + " severity=" + e.Severity.String() + " span=" + e.SpanID + " trace_sampled=" + fmt.Sprint(e.TraceSampled)
+	attrs, ok := e.Payload.(map[string]any)
+	if ok {
+		for k, v := range attrs {
+			vStr, ok := v.(string)
+			if ok {
+				logStr += " " + k + "=" + vStr
+			}
+		}
+	}
+	_, _ = t.buf.WriteString(logStr)
 }
 
 type captureLogger struct {
