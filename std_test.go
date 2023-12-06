@@ -171,13 +171,28 @@ func Test_stdAttributer_AddAttribute(t *testing.T) {
 				value: "test_value_0",
 			},
 			attributes: map[string]any{
-				"test_key_1": "test_value_1",
+				"test_key_1": 1,
 				"test_key_2": "test_value_2",
 			},
 			want: map[string]any{
-				"test_key_1": "test_value_1",
+				"test_key_1": 1,
 				"test_key_2": "test_value_2",
 				"test_key_0": "test_value_0",
+			},
+		},
+		{
+			name: "success overwriting attribute",
+			args: args{
+				key:   "test_key_1",
+				value: 512,
+			},
+			attributes: map[string]any{
+				"test_key_1": 1,
+				"test_key_2": "test_value_2",
+			},
+			want: map[string]any{
+				"test_key_1": 512,
+				"test_key_2": "test_value_2",
 			},
 		},
 	}

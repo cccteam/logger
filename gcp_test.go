@@ -587,10 +587,10 @@ func Test_gcpLogger_AddRequestAttribute(t *testing.T) {
 		want   map[string]any
 	}{
 		{
-			name: "success prefixing reserved key",
+			name: "prefix reserved key",
 			fields: fields{
 				root: &gcpLogger{
-					reqAttributes: map[string]any{"test_key": "test_value"},
+					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
 				},
 				rsvdKeys: []string{"test_key 1", "test_key"},
 			},
@@ -598,13 +598,13 @@ func Test_gcpLogger_AddRequestAttribute(t *testing.T) {
 				key:   "test_key",
 				value: 512,
 			},
-			want: map[string]any{"test_key": "test_value", "custom_test_key": 512},
+			want: map[string]any{"test_key_2": "test_value_2", "custom_test_key": 512},
 		},
 		{
-			name: "success adding request attribute (non-reserved key)",
+			name: "add request attribute (non-reserved key)",
 			fields: fields{
 				root: &gcpLogger{
-					reqAttributes: map[string]any{"test_key": "test_value"},
+					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
 				},
 				rsvdKeys: []string{"test_key 1"},
 			},
@@ -612,7 +612,21 @@ func Test_gcpLogger_AddRequestAttribute(t *testing.T) {
 				key:   "test_key",
 				value: 512,
 			},
-			want: map[string]any{"test_key": 512},
+			want: map[string]any{"test_key_2": "test_value_2", "test_key": 512},
+		},
+		{
+			name: "overwrite request attribute value",
+			fields: fields{
+				root: &gcpLogger{
+					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+				},
+				rsvdKeys: []string{"test_key 1"},
+			},
+			args: args{
+				key:   "test_key_2",
+				value: 512,
+			},
+			want: map[string]any{"test_key_2": 512},
 		},
 	}
 	for _, tt := range tests {
@@ -686,37 +700,53 @@ func Test_gcpAttributer_AddAttribute(t *testing.T) {
 		want       map[string]any
 	}{
 		{
-			name: "success prefixing reserved key",
+			name: "prefix reserved key",
 			args: args{
 				key:   "test_key_0",
 				value: "test_value_0",
 			},
 			rsvdKeys: []string{"test_key 0", "test_key_0"},
 			attributes: map[string]any{
-				"test_key_1": "test_value_1",
+				"test_key_1": 1,
 				"test_key_2": "test_value_2",
 			},
 			want: map[string]any{
-				"test_key_1":        "test_value_1",
+				"test_key_1":        1,
 				"test_key_2":        "test_value_2",
 				"custom_test_key_0": "test_value_0",
 			},
 		},
 		{
-			name: "success adding attribute (non-reserved key)",
+			name: "add attribute (non-reserved key)",
 			args: args{
 				key:   "test_key_0",
 				value: "test_value_0",
 			},
 			rsvdKeys: []string{"test_key 0"},
 			attributes: map[string]any{
-				"test_key_1": "test_value_1",
+				"test_key_1": 1,
 				"test_key_2": "test_value_2",
 			},
 			want: map[string]any{
-				"test_key_1": "test_value_1",
+				"test_key_1": 1,
 				"test_key_2": "test_value_2",
 				"test_key_0": "test_value_0",
+			},
+		},
+		{
+			name: "overwrite attribute value",
+			args: args{
+				key:   "test_key_1",
+				value: 512,
+			},
+			rsvdKeys: []string{"test_key 0"},
+			attributes: map[string]any{
+				"test_key_1": 1,
+				"test_key_2": "test_value_2",
+			},
+			want: map[string]any{
+				"test_key_1": 512,
+				"test_key_2": "test_value_2",
 			},
 		},
 	}

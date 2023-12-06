@@ -399,7 +399,7 @@ func Test_consoleLogger_AddRequestAttribute(t *testing.T) {
 			name: "prefix reserved key with 'custom_'",
 			fields: fields{
 				root: &consoleLogger{
-					reqAttributes: map[string]any{"test_key": "test_value"},
+					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
 				},
 				rsvdReqKeys: []string{"test_key 1", "test_key"},
 			},
@@ -407,13 +407,13 @@ func Test_consoleLogger_AddRequestAttribute(t *testing.T) {
 				key:   "test_key",
 				value: 512,
 			},
-			want: map[string]any{"test_key": "test_value", "custom_test_key": 512},
+			want: map[string]any{"test_key_2": "test_value_2", "custom_test_key": 512},
 		},
 		{
-			name: "success adding request attribute",
+			name: "add request attribute (non-reserved key)",
 			fields: fields{
 				root: &consoleLogger{
-					reqAttributes: map[string]any{"test_key": "test_value"},
+					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
 				},
 				rsvdReqKeys: []string{"test_key 1"},
 			},
@@ -421,7 +421,21 @@ func Test_consoleLogger_AddRequestAttribute(t *testing.T) {
 				key:   "test_key",
 				value: 512,
 			},
-			want: map[string]any{"test_key": 512},
+			want: map[string]any{"test_key_2": "test_value_2", "test_key": 512},
+		},
+		{
+			name: "overwrite request attribute value",
+			fields: fields{
+				root: &consoleLogger{
+					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+				},
+				rsvdReqKeys: []string{"test_key 1"},
+			},
+			args: args{
+				key:   "test_key_2",
+				value: 512,
+			},
+			want: map[string]any{"test_key_2": 512},
 		},
 	}
 	for _, tt := range tests {
@@ -494,19 +508,34 @@ func Test_consoleAttributer_AddAttribute(t *testing.T) {
 		want       map[string]any
 	}{
 		{
-			name: "success adding attribute",
+			name: "add attribute",
 			args: args{
 				key:   "test_key_0",
-				value: "test_value_0",
+				value: 0,
 			},
 			attributes: map[string]any{
-				"test_key_1": "test_value_1",
+				"test_key_1": 1,
 				"test_key_2": "test_value_2",
 			},
 			want: map[string]any{
-				"test_key_1": "test_value_1",
+				"test_key_1": 1,
 				"test_key_2": "test_value_2",
-				"test_key_0": "test_value_0",
+				"test_key_0": 0,
+			},
+		},
+		{
+			name: "overwrite attribute value",
+			args: args{
+				key:   "test_key_1",
+				value: "512",
+			},
+			attributes: map[string]any{
+				"test_key_1": 1,
+				"test_key_2": "test_value_2",
+			},
+			want: map[string]any{
+				"test_key_1": "512",
+				"test_key_2": "test_value_2",
 			},
 		},
 	}

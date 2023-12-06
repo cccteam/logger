@@ -223,9 +223,9 @@ func TestAttributerLogger_AddAttribute(t *testing.T) {
 		wantAttributes  map[string]any
 	}{
 		{
-			name: "success adding attribute",
+			name: "add attribute",
 			startAttributes: map[string]any{
-				"existing_key_1": "existing_value_1",
+				"existing_key_1": 1,
 				"existing_key_2": "existing_value_2",
 			},
 			args: args{
@@ -233,9 +233,24 @@ func TestAttributerLogger_AddAttribute(t *testing.T) {
 				value: "new_req_value",
 			},
 			wantAttributes: map[string]any{
-				"existing_key_1": "existing_value_1",
+				"existing_key_1": 1,
 				"existing_key_2": "existing_value_2",
 				"new_req_key":    "new_req_value",
+			},
+		},
+		{
+			name: "overwrite attribute value",
+			startAttributes: map[string]any{
+				"existing_key_1": 1,
+				"existing_key_2": "existing_value_2",
+			},
+			args: args{
+				key:   "existing_key_1",
+				value: 512,
+			},
+			wantAttributes: map[string]any{
+				"existing_key_1": 512,
+				"existing_key_2": "existing_value_2",
 			},
 		},
 	}
