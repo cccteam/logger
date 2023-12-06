@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"reflect"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestLogger(t *testing.T) {
@@ -203,6 +205,64 @@ func TestLogger_WithAttributes(t *testing.T) {
 			}
 			if _, ok := got.attributer.(*testAttributer); !ok {
 				t.Errorf("Logger.WithAttributes().attributer type %T, want %T", got.attributer, &testAttributer{})
+			}
+		})
+	}
+}
+
+func TestAttributerLogger_AddAttribute(t *testing.T) {
+	t.Parallel()
+	type args struct {
+		key   string
+		value any
+	}
+	tests := []struct {
+		name            string
+		startAttributes map[string]any
+		args            args
+		wantAttributes  map[string]any
+	}{
+		{
+			name: "success adding attribute",
+			startAttributes: map[string]any{
+				"existing_key_1": "existing_value_1",
+				"existing_key_2": "existing_value_2",
+			},
+			args: args{
+				key:   "new_req_key",
+				value: "new_req_value",
+			},
+			wantAttributes: map[string]any{
+				"existing_key_1": "existing_value_1",
+				"existing_key_2": "existing_value_2",
+				"new_req_key":    "new_req_value",
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := &AttributerLogger{
+				logger: &Logger{},
+				attributer: &testAttributer{
+					attributes: tt.startAttributes,
+				},
+			}
+			got := a.AddAttribute(tt.args.key, tt.args.value)
+			if got != a {
+				t.Error("AttributerLogger.AddAttribute() did not return reference to original AttributerLogger")
+			}
+			if got.logger != a.logger {
+				t.Errorf("AttributerLogger.AddAttribute().logger NOT equal to original logger")
+			}
+			gotAttributer, ok := got.attributer.(*testAttributer)
+			if !ok {
+				t.Errorf("AttributerLogger.AddAttribute().attributer type %T, want %T", got.attributer, &testAttributer{})
+				return
+			}
+			if diff := cmp.Diff(gotAttributer.attributes, tt.wantAttributes); diff != "" {
+				t.Errorf("attributes mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
