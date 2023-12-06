@@ -506,3 +506,44 @@ func Test_consoleLogger_AddRequestAttribute(t *testing.T) {
 		})
 	}
 }
+
+func Test_consoleLogger_WithAttributes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		attributes map[string]any
+		want       *consoleAttributer
+	}{
+		{
+			name: "with attributes success",
+			attributes: map[string]any{
+				"test_key_1": "test_value_1",
+				"test_key_2": "test_value_2",
+			},
+			want: &consoleAttributer{
+				attributes: map[string]any{
+					"test_key_1": "test_value_1",
+					"test_key_2": "test_value_2",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := &consoleLogger{
+				attributes: tt.attributes,
+			}
+			got := l.WithAttributes()
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(consoleAttributer{}), cmpopts.IgnoreFields(consoleAttributer{}, "logger")); diff != "" {
+				t.Errorf("consoleLogger.WithAttributes() mismatch (-want +got):\n%s", diff)
+			}
+			if a, ok := got.(*consoleAttributer); !ok {
+				t.Errorf("consoleLogger.WithAttributes() type %T, want %T", got, &consoleAttributer{})
+			} else if a.logger != l {
+				t.Errorf("consoleLogger.WithAttributes().logger != consoleLogger")
+			}
+		})
+	}
+}

@@ -593,6 +593,47 @@ func Test_awsLogger_AddRequestAttribute(t *testing.T) {
 	}
 }
 
+func Test_awsLogger_WithAttributes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		attributes map[string]any
+		want       *awsAttributer
+	}{
+		{
+			name: "with attributes success",
+			attributes: map[string]any{
+				"test_key_1": "test_value_1",
+				"test_key_2": "test_value_2",
+			},
+			want: &awsAttributer{
+				attributes: map[string]any{
+					"test_key_1": "test_value_1",
+					"test_key_2": "test_value_2",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := &awsLogger{
+				attributes: tt.attributes,
+			}
+			got := l.WithAttributes()
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(awsAttributer{}), cmpopts.IgnoreFields(awsAttributer{}, "logger")); diff != "" {
+				t.Errorf("awsLogger.WithAttributes() mismatch (-want +got):\n%s", diff)
+			}
+			if a, ok := got.(*awsAttributer); !ok {
+				t.Errorf("awsLogger.WithAttributes() type %T, want %T", got, &awsAttributer{})
+			} else if a.logger != l {
+				t.Errorf("awsLogger.WithAttributes().logger != awsLogger")
+			}
+		})
+	}
+}
+
 type testSlogger struct {
 	buf *bytes.Buffer
 }

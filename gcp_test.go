@@ -686,6 +686,47 @@ func Test_gcpLogger_AddRequestAttribute(t *testing.T) {
 	}
 }
 
+func Test_gcpLogger_WithAttributes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		attributes map[string]any
+		want       *gcpAttributer
+	}{
+		{
+			name: "with attributes success",
+			attributes: map[string]any{
+				"test_key_1": "test_value_1",
+				"test_key_2": "test_value_2",
+			},
+			want: &gcpAttributer{
+				attributes: map[string]any{
+					"test_key_1": "test_value_1",
+					"test_key_2": "test_value_2",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := &gcpLogger{
+				attributes: tt.attributes,
+			}
+			got := l.WithAttributes()
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(gcpAttributer{}), cmpopts.IgnoreFields(gcpAttributer{}, "logger")); diff != "" {
+				t.Errorf("gcpLogger.WithAttributes() mismatch (-want +got):\n%s", diff)
+			}
+			if a, ok := got.(*gcpAttributer); !ok {
+				t.Errorf("gcpLogger.WithAttributes() type %T, want %T", got, &gcpAttributer{})
+			} else if a.logger != l {
+				t.Errorf("gcpLogger.WithAttributes().logger != gcpLogger")
+			}
+		})
+	}
+}
+
 func disableMetaServertest(t *testing.T) {
 	t.Helper()
 
