@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/cccteam/logger/compare/v0.1.3...v0.1.4) (2023-12-07)
+
+
+### Features
+
+* Support adding attributes to logs dynamically ([#19](https://github.com/cccteam/logger/issues/19)) ([4b8c36b](https://github.com/cccteam/logger/commit/4b8c36bfe00f853e3b4a201378a06fbe6faf708e))
+
 ## [0.1.3](https://github.com/cccteam/logger/compare/v0.1.2...v0.1.3) (2023-11-06)
 
 
