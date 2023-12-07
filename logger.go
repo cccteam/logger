@@ -9,6 +9,8 @@
 // The AWSExporter supports log correlation to AWS X-Ray if you instrument your code with tracing.
 package logger
 
+//go:generate mockgen -source context.go -package $GOPACKAGE -destination mock_context_test.go
+
 import (
 	"context"
 	"net/http"

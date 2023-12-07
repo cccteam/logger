@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -68,8 +69,8 @@ func TestLogger(t *testing.T) {
 			t.Parallel()
 
 			var buf bytes.Buffer
-			l := &testCtxLogger{buf: &buf}
-			ctx := newContext(context.WithValue(context.Background(), l, " testCtxValue"), l)
+			ctxLgr := &testCtxLogger{buf: &buf}
+			ctx := newContext(context.WithValue(context.Background(), ctxLgr, " testCtxValue"), ctxLgr)
 
 			r := &http.Request{}
 			r = r.WithContext(ctx)
@@ -136,9 +137,9 @@ func TestLogger_AddRequestAttribute(t *testing.T) {
 		value any
 	}
 	tests := []struct {
-		name string
-		args args
-		want *Logger
+		name    string
+		args    args
+		prepare func(l *MockctxLogger)
 	}{
 		{
 			name: "success adding request attribute",
@@ -146,18 +147,8 @@ func TestLogger_AddRequestAttribute(t *testing.T) {
 				key:   "new_req_key",
 				value: "new_req_value",
 			},
-			want: &Logger{
-				lg: &testCtxLogger{
-					reqAttributes: map[string]any{
-						"existing_req_key_1": "existing_req_value_1",
-						"existing_req_key_2": "existing_req_value_2",
-						"new_req_key":        "new_req_value",
-					},
-					attributes: map[string]any{
-						"existing_key_1": "existing_value_1",
-						"existing_key_2": "existing_value_2",
-					},
-				},
+			prepare: func(l *MockctxLogger) {
+				l.EXPECT().AddRequestAttribute("new_req_key", "new_req_value").Times(1)
 			},
 		},
 	}
@@ -165,20 +156,12 @@ func TestLogger_AddRequestAttribute(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			l := &Logger{
-				lg: &testCtxLogger{
-					reqAttributes: map[string]any{
-						"existing_req_key_1": "existing_req_value_1",
-						"existing_req_key_2": "existing_req_value_2",
-					},
-					attributes: map[string]any{
-						"existing_key_1": "existing_value_1",
-						"existing_key_2": "existing_value_2",
-					},
-				},
-			}
-			if got := l.AddRequestAttribute(tt.args.key, tt.args.value); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Logger.AddRequestAttribute() = %v, want %v", got, tt.want)
+
+			ctxLgr := NewMockctxLogger(gomock.NewController(t))
+			tt.prepare(ctxLgr)
+			l := &Logger{lg: ctxLgr}
+			if got := l.AddRequestAttribute(tt.args.key, tt.args.value); got != l {
+				t.Error("Logger.AddRequestAttribute() did not return reference to original Logger (self)")
 			}
 		})
 	}
@@ -187,24 +170,40 @@ func TestLogger_AddRequestAttribute(t *testing.T) {
 func TestLogger_WithAttributes(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name string
-		want *AttributerLogger
+		name           string
+		prepare        func(l *MockctxLogger)
+		wantAttributer attributer
 	}{
 		{
 			name: "Logger with attributes success",
+			prepare: func(l *MockctxLogger) {
+				l.EXPECT().WithAttributes().Return(&consoleAttributer{
+					attributes: map[string]any{
+						"with_attributes_test_key": "with_attributes_test_value",
+					},
+				}).Times(1)
+			},
+			wantAttributer: &consoleAttributer{
+				attributes: map[string]any{
+					"with_attributes_test_key": "with_attributes_test_value",
+				},
+			},
 		},
 	}
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			l := &Logger{lg: &testCtxLogger{}}
-			got := l.WithAttributes()
-			if got.logger != l {
-				t.Errorf("Logger.WithAttributes() = %v, want %v", got.logger, l)
+			ctxLgr := NewMockctxLogger(gomock.NewController(t))
+			tt.prepare(ctxLgr)
+			l := &Logger{lg: ctxLgr}
+
+			want := &AttributerLogger{
+				logger:     l,
+				attributer: tt.wantAttributer,
 			}
-			if _, ok := got.attributer.(*testAttributer); !ok {
-				t.Errorf("Logger.WithAttributes().attributer type %T, want %T", got.attributer, &testAttributer{})
+			if got := l.WithAttributes(); !reflect.DeepEqual(got, want) {
+				t.Errorf("Logger.WithAttributes() = %v, want %v", got, want)
 			}
 		})
 	}
@@ -217,40 +216,15 @@ func TestAttributerLogger_AddAttribute(t *testing.T) {
 		value any
 	}
 	tests := []struct {
-		name            string
-		startAttributes map[string]any
-		args            args
-		wantAttributes  map[string]any
+		name    string
+		args    args
+		prepare func(a *Mockattributer)
 	}{
 		{
-			name: "add attribute",
-			startAttributes: map[string]any{
-				"existing_key_1": 1,
-				"existing_key_2": "existing_value_2",
-			},
-			args: args{
-				key:   "new_req_key",
-				value: "new_req_value",
-			},
-			wantAttributes: map[string]any{
-				"existing_key_1": 1,
-				"existing_key_2": "existing_value_2",
-				"new_req_key":    "new_req_value",
-			},
-		},
-		{
-			name: "overwrite attribute value",
-			startAttributes: map[string]any{
-				"existing_key_1": 1,
-				"existing_key_2": "existing_value_2",
-			},
-			args: args{
-				key:   "existing_key_1",
-				value: 512,
-			},
-			wantAttributes: map[string]any{
-				"existing_key_1": 512,
-				"existing_key_2": "existing_value_2",
+			name: "success adding attribute",
+			args: args{key: "new_key", value: "new_value"},
+			prepare: func(a *Mockattributer) {
+				a.EXPECT().AddAttribute("new_key", "new_value").Times(1)
 			},
 		},
 	}
@@ -258,26 +232,14 @@ func TestAttributerLogger_AddAttribute(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			mockAttributer := NewMockattributer(gomock.NewController(t))
+			tt.prepare(mockAttributer)
 			a := &AttributerLogger{
-				logger: &Logger{},
-				attributer: &testAttributer{
-					attributes: tt.startAttributes,
-				},
+				logger:     &Logger{},
+				attributer: mockAttributer,
 			}
-			got := a.AddAttribute(tt.args.key, tt.args.value)
-			if got != a {
-				t.Error("AttributerLogger.AddAttribute() did not return reference to original AttributerLogger")
-			}
-			if got.logger != a.logger {
-				t.Errorf("AttributerLogger.AddAttribute().logger NOT equal to original logger")
-			}
-			gotAttributer, ok := got.attributer.(*testAttributer)
-			if !ok {
-				t.Errorf("AttributerLogger.AddAttribute().attributer type %T, want %T", got.attributer, &testAttributer{})
-				return
-			}
-			if diff := cmp.Diff(gotAttributer.attributes, tt.wantAttributes); diff != "" {
-				t.Errorf("attributes mismatch (-want +got):\n%s", diff)
+			if got := a.AddAttribute(tt.args.key, tt.args.value); got != a {
+				t.Error("AttributerLogger.AddAttribute() did not return reference to original AttributerLogger (self)")
 			}
 		})
 	}
@@ -286,26 +248,45 @@ func TestAttributerLogger_AddAttribute(t *testing.T) {
 func TestAttributerLogger_Logger(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name string
+		name       string
+		prepare    func(a *Mockattributer)
+		wantCtxLgr *testCtxLogger
 	}{
 		{
 			name: "success getting Logger",
+			prepare: func(a *Mockattributer) {
+				a.EXPECT().Logger().Return(&testCtxLogger{
+					buf: bytes.NewBufferString("buffer for TestAttributerLogger_Logger"),
+				}).Times(1)
+			},
+			wantCtxLgr: &testCtxLogger{
+				buf: bytes.NewBufferString("buffer for TestAttributerLogger_Logger"),
+			},
 		},
 	}
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
+			mockAttributer := NewMockattributer(gomock.NewController(t))
+			tt.prepare(mockAttributer)
 			a := &AttributerLogger{
 				logger:     &Logger{ctx: context.Background()},
-				attributer: &testAttributer{},
+				attributer: mockAttributer,
 			}
+
 			got := a.Logger()
 			if got.ctx != a.logger.ctx {
-				t.Error("AttributerLogger.Logger().ctx NOT equal to original logger ctx")
+				t.Error("AttributerLogger.Logger().ctx NOT original logger's ctx")
 			}
-			if _, ok := got.lg.(*testCtxLogger); !ok {
-				t.Errorf("AttributerLogger.Logger().lg type %T, want %T", got.lg, &testCtxLogger{})
+			gotCtxLgr, ok := got.lg.(*testCtxLogger)
+			if !ok {
+				t.Errorf("AttributerLogger.Logger().lg type %T, expected %T", got.lg, &testCtxLogger{})
+				return
+			}
+			if diff := cmp.Diff(gotCtxLgr, tt.wantCtxLgr, cmp.AllowUnexported(testCtxLogger{}, bytes.Buffer{})); diff != "" {
+				t.Errorf("AttributerLogger.Logger().lg mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -314,9 +295,7 @@ func TestAttributerLogger_Logger(t *testing.T) {
 var _ ctxLogger = &testCtxLogger{}
 
 type testCtxLogger struct {
-	buf           *bytes.Buffer
-	reqAttributes map[string]any
-	attributes    map[string]any
+	buf *bytes.Buffer
 }
 
 func (l *testCtxLogger) Debug(ctx context.Context, v any) {
@@ -351,24 +330,8 @@ func (l *testCtxLogger) Errorf(ctx context.Context, format string, v ...any) {
 	l.buf.WriteString("Errorf: " + fmt.Sprintf(format, v...) + "," + fmt.Sprint(ctx.Value(l)))
 }
 
-func (l *testCtxLogger) AddRequestAttribute(key string, value any) {
-	l.reqAttributes[key] = value
-}
+func (l *testCtxLogger) AddRequestAttribute(_ string, _ any) {}
 
 func (l *testCtxLogger) WithAttributes() attributer {
-	return &testAttributer{}
-}
-
-var _ attributer = &testAttributer{}
-
-type testAttributer struct {
-	attributes map[string]any
-}
-
-func (a *testAttributer) AddAttribute(key string, value any) {
-	a.attributes[key] = value
-}
-
-func (a *testAttributer) Logger() ctxLogger {
-	return &testCtxLogger{}
+	return &Mockattributer{}
 }
