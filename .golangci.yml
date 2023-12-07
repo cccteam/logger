@@ -12,8 +12,8 @@ linters-settings:
           - contrib.go.opencensus.io/exporter/stackdriver/propagation
           - github.com/go-playground/errors
           - github.com/go-test/deep
-          - github.com/golang
           - github.com/google/go-cmp
+          - go.uber.org/mock/gomock
   funlen:
     lines: 100
     statements: 50

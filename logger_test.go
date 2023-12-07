@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
+	"go.uber.org/mock/gomock"
 )
 
 func TestLogger(t *testing.T) {

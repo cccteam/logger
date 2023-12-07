@@ -7,11 +7,11 @@ require (
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.14
 	github.com/go-playground/errors/v5 v5.4.0
 	github.com/go-test/deep v1.1.0
-	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.6.0
 	go.opentelemetry.io/otel v1.21.0
 	go.opentelemetry.io/otel/sdk v1.21.0
 	go.opentelemetry.io/otel/trace v1.21.0
+	go.uber.org/mock v0.3.0
 )
 
 require (
