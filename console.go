@@ -123,7 +123,7 @@ func (l *consoleLogger) newChild() *consoleLogger {
 		rsvdReqKeys:   l.rsvdReqKeys,
 		maxSeverity:   logging.Debug,
 		attributes:    make(map[string]any),
-		reqAttributes: nil, // stating zero value for clear intent
+		reqAttributes: nil, // reqAttributes is only used in the root logger, never the child.
 	}
 }
 

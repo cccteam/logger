@@ -141,7 +141,7 @@ func (l *awsLogger) newChild() *awsLogger {
 		rsvdKeys:      l.rsvdKeys,
 		rsvdReqKeys:   l.rsvdReqKeys,
 		attributes:    make(map[string]any),
-		reqAttributes: nil, // stating zero value for clear intent
+		reqAttributes: nil, // reqAttributes is only used in the root logger, never the child.
 	}
 }
 
