@@ -13,6 +13,7 @@ linters-settings:
           - github.com/go-playground/errors
           - github.com/go-test/deep
           - github.com/google/go-cmp
+          - go.uber.org/mock/gomock
   funlen:
     lines: 100
     statements: 50

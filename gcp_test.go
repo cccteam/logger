@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"reflect"
+	"strings"
 	"testing"
 
 	"cloud.google.com/go/logging"
@@ -228,7 +230,7 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			wantLevel: logging.Warning,
 		},
 		{
-			name: "logAll=true no logging",
+			name: "logging for error status",
 			fields: fields{
 				projectID: "my-big-project",
 				logAll:    true,
@@ -266,12 +268,13 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 							}
 						}
 
-						l := Req(r)
-						if l, ok := l.lg.(*gcpLogger); ok {
-							traceID = l.traceID
-						} else {
-							t.Fatalf("Req() = %v, wanted: %T", l, &gcpLogger{})
+						gcpLgr, ok := Req(r).lg.(*gcpLogger)
+						if !ok {
+							t.Fatalf("Req() = %v, wanted: %T", gcpLgr, &gcpLogger{})
 						}
+						traceID = gcpLgr.traceID
+						gcpLgr.reqAttributes["test_key_1"] = "test_value_1"
+						gcpLgr.reqAttributes["test_key_2"] = "test_value_2"
 
 						w.WriteHeader(tt.args.status)
 						handlerCalled = true
@@ -286,7 +289,7 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			if !handlerCalled {
 				t.Errorf("Failed to call handler")
 			}
-			if tt.args.logs == 0 {
+			if !tt.fields.logAll && tt.args.logs == 0 {
 				return
 			}
 			if l.e.Severity != tt.wantLevel {
@@ -295,17 +298,18 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			if l.e.Trace != traceID {
 				t.Errorf("Trace = %v, want %v", l.e.Trace, traceID)
 			}
-			if pl, ok := l.e.Payload.(map[string]any); ok {
-				if m, ok := pl["message"].(string); ok {
-					if m != "Parent Log Entry" {
-						t.Errorf("Message = %v, want %v", m, "Parent Log Entry")
-					}
-				} else {
-					t.Fatalf("Message = %T, want %T", pl["message"], "")
-				}
-			} else {
-				t.Fatalf("Payload = %T, want %T", l.e.Payload, map[string]any{})
+
+			wantPayload := map[string]any{
+				"message":    "Parent Log Entry",
+				"test_key_1": "test_value_1",
+				"test_key_2": "test_value_2",
 			}
+			if pl, ok := l.e.Payload.(map[string]any); ok {
+				if diff := cmp.Diff(pl, wantPayload); diff != "" {
+					t.Errorf("Payload mismatch (-want +got):\n%s", diff)
+				}
+			}
+
 			if l.e.HTTPRequest.Status != tt.args.status {
 				t.Errorf("Status = %v, want %v", l.e.HTTPRequest.Status, tt.args.status)
 			}
@@ -407,8 +411,11 @@ func Test_newGCPLogger(t *testing.T) {
 				traceID: "hello",
 			},
 			want: &gcpLogger{
-				lg:      &logging.Logger{},
-				traceID: "hello",
+				logger:        &logging.Logger{},
+				traceID:       "hello",
+				rsvdKeys:      []string{"message"},
+				reqAttributes: map[string]any{},
+				attributes:    map[string]any{},
 			},
 		},
 	}
@@ -416,8 +423,12 @@ func Test_newGCPLogger(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := newGCPLogger(tt.args.lg, tt.args.traceID); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("New() = %v, want %v", got, tt.want)
+			got := newGCPLogger(tt.args.lg, tt.args.traceID)
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(gcpLogger{}), cmpopts.IgnoreFields(gcpLogger{}, "logger", "mu", "root")); diff != "" {
+				t.Errorf("newGCPLogger() mismatch (-want +got):\n%s", diff)
+			}
+			if got.root != got {
+				t.Errorf("newGCPLogger().root is not self")
 			}
 		})
 	}
@@ -426,6 +437,10 @@ func Test_newGCPLogger(t *testing.T) {
 func Test_gcpLogger(t *testing.T) {
 	t.Parallel()
 
+	type fields struct {
+		attributes map[string]any
+		traceID    string
+	}
 	type args struct {
 		format string
 		v      []any
@@ -433,6 +448,7 @@ func Test_gcpLogger(t *testing.T) {
 	}
 	tests := []struct {
 		name       string
+		fields     fields
 		args       args
 		wantDebug  string
 		wantDebugf string
@@ -445,6 +461,10 @@ func Test_gcpLogger(t *testing.T) {
 	}{
 		{
 			name: "Strings",
+			fields: fields{
+				attributes: map[string]any{"a test key": "a test value"},
+				traceID:    "123987",
+			},
 			args: args{
 				format: "Formatted %s",
 				v:      []any{"Message"},
@@ -461,6 +481,10 @@ func Test_gcpLogger(t *testing.T) {
 		},
 		{
 			name: "String & Error",
+			fields: fields{
+				attributes: map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+				traceID:    "987123",
+			},
 			args: args{
 				format: "Formatted %s",
 				v:      []any{"Message"},
@@ -481,62 +505,329 @@ func Test_gcpLogger(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
+			ctx, span := otel.Tracer("test tracer").Start(context.Background(), "a test")
 			var buf bytes.Buffer
 
 			l := &gcpLogger{
-				lg: &testLogger{
+				logger: &testLogger{
 					buf: &buf,
 				},
+				attributes: tt.fields.attributes,
+				traceID:    tt.fields.traceID,
+			}
+			l.root = l
+
+			verifyOutput := func(output, methodName, expectedMsgVal string, expectedSeverity logging.Severity) {
+				expectedVals := []string{
+					"message=" + expectedMsgVal,
+					"trace=" + tt.fields.traceID,
+					"severity=" + expectedSeverity.String(),
+					"span=" + span.SpanContext().SpanID().String(),
+					"trace_sampled=" + fmt.Sprint(span.SpanContext().IsSampled()),
+				}
+				for k, v := range tt.fields.attributes {
+					expectedVals = append(expectedVals, slog.Any(k, v).String())
+				}
+				for _, v := range expectedVals {
+					if !strings.Contains(output, v) {
+						t.Errorf("gcpLogger.%s() = %q, missing: %q", methodName, output, v)
+					}
+				}
 			}
 
 			l.Debug(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantDebug {
-				t.Errorf("stdErrLogger.Debug() value = %v, wantValue %v", s, tt.wantDebug)
-			}
+			verifyOutput(buf.String(), "Debug", tt.wantDebug, logging.Debug)
 			buf.Reset()
 
 			l.Debugf(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantDebugf {
-				t.Errorf("stdErrLogger.Debug() value = %v, wantValue %v", s, tt.wantDebugf)
-			}
+			verifyOutput(buf.String(), "Debugf", tt.wantDebugf, logging.Debug)
 			buf.Reset()
 
 			l.Info(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantInfo {
-				t.Errorf("stdErrLogger.Info() value = %v, wantValue %v", s, tt.wantInfo)
-			}
+			verifyOutput(buf.String(), "Info", tt.wantInfo, logging.Info)
 			buf.Reset()
 
 			l.Infof(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantInfof {
-				t.Errorf("stdErrLogger.Info() value = %v, wantValue %v", s, tt.wantInfof)
-			}
+			verifyOutput(buf.String(), "Infof", tt.wantInfof, logging.Info)
 			buf.Reset()
 
 			l.Warn(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantWarn {
-				t.Errorf("stdErrLogger.Warn() value = %v, wantValue %v", s, tt.wantWarn)
-			}
+			verifyOutput(buf.String(), "Warn", tt.wantWarn, logging.Warning)
 			buf.Reset()
 
 			l.Warnf(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantWarnf {
-				t.Errorf("stdErrLogger.Warn() value = %v, wantValue %v", s, tt.wantWarnf)
-			}
+			verifyOutput(buf.String(), "Warnf", tt.wantWarnf, logging.Warning)
 			buf.Reset()
 
 			l.Error(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantError {
-				t.Errorf("stdErrLogger.Error() value = %v, wantValue %v", s, tt.wantError)
-			}
+			verifyOutput(buf.String(), "Error", tt.wantError, logging.Error)
 			buf.Reset()
 
 			l.Errorf(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantErrorf {
-				t.Errorf("stdErrLogger.Error() value = %v, wantValue %v", s, tt.wantErrorf)
-			}
+			verifyOutput(buf.String(), "Errorf", tt.wantErrorf, logging.Error)
 			buf.Reset()
+		})
+	}
+}
+
+func Test_gcpLogger_AddRequestAttribute(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		root     *gcpLogger
+		rsvdKeys []string
+	}
+	type args struct {
+		key   string
+		value any
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   map[string]any
+	}{
+		{
+			name: "prefix reserved key",
+			fields: fields{
+				root: &gcpLogger{
+					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+				},
+				rsvdKeys: []string{"test_key 1", "test_key"},
+			},
+			args: args{
+				key:   "test_key",
+				value: 512,
+			},
+			want: map[string]any{"test_key_2": "test_value_2", "custom_test_key": 512},
+		},
+		{
+			name: "add request attribute (non-reserved key)",
+			fields: fields{
+				root: &gcpLogger{
+					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+				},
+				rsvdKeys: []string{"test_key 1"},
+			},
+			args: args{
+				key:   "test_key",
+				value: 512,
+			},
+			want: map[string]any{"test_key_2": "test_value_2", "test_key": 512},
+		},
+		{
+			name: "overwrite request attribute value",
+			fields: fields{
+				root: &gcpLogger{
+					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+				},
+				rsvdKeys: []string{"test_key 1"},
+			},
+			args: args{
+				key:   "test_key_2",
+				value: 512,
+			},
+			want: map[string]any{"test_key_2": 512},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := &gcpLogger{
+				root:     tt.fields.root,
+				rsvdKeys: tt.fields.rsvdKeys,
+			}
+			l.AddRequestAttribute(tt.args.key, tt.args.value)
+			if diff := cmp.Diff(l.root.reqAttributes, tt.want); diff != "" {
+				t.Errorf("gcpLogger.AddRequestAttribute() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func Test_gcpLogger_WithAttributes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		attributes map[string]any
+		want       *gcpAttributer
+	}{
+		{
+			name: "with attributes success",
+			attributes: map[string]any{
+				"test_key_1": "test_value_1",
+				"test_key_2": "test_value_2",
+			},
+			want: &gcpAttributer{
+				attributes: map[string]any{
+					"test_key_1": "test_value_1",
+					"test_key_2": "test_value_2",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := &gcpLogger{
+				attributes: tt.attributes,
+			}
+			got := l.WithAttributes()
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(gcpAttributer{}), cmpopts.IgnoreFields(gcpAttributer{}, "logger")); diff != "" {
+				t.Errorf("gcpLogger.WithAttributes() mismatch (-want +got):\n%s", diff)
+			}
+			if a, ok := got.(*gcpAttributer); !ok {
+				t.Errorf("gcpLogger.WithAttributes() type %T, want %T", got, &gcpAttributer{})
+			} else if a.logger != l {
+				t.Errorf("gcpLogger.WithAttributes().logger != gcpLogger")
+			}
+		})
+	}
+}
+
+func Test_gcpAttributer_AddAttribute(t *testing.T) {
+	t.Parallel()
+	type args struct {
+		key   string
+		value any
+	}
+	tests := []struct {
+		name       string
+		args       args
+		rsvdKeys   []string
+		attributes map[string]any
+		want       map[string]any
+	}{
+		{
+			name: "prefix reserved key",
+			args: args{
+				key:   "test_key_0",
+				value: "test_value_0",
+			},
+			rsvdKeys: []string{"test_key 0", "test_key_0"},
+			attributes: map[string]any{
+				"test_key_1": 1,
+				"test_key_2": "test_value_2",
+			},
+			want: map[string]any{
+				"test_key_1":        1,
+				"test_key_2":        "test_value_2",
+				"custom_test_key_0": "test_value_0",
+			},
+		},
+		{
+			name: "add attribute (non-reserved key)",
+			args: args{
+				key:   "test_key_0",
+				value: "test_value_0",
+			},
+			rsvdKeys: []string{"test_key 0"},
+			attributes: map[string]any{
+				"test_key_1": 1,
+				"test_key_2": "test_value_2",
+			},
+			want: map[string]any{
+				"test_key_1": 1,
+				"test_key_2": "test_value_2",
+				"test_key_0": "test_value_0",
+			},
+		},
+		{
+			name: "overwrite attribute value",
+			args: args{
+				key:   "test_key_1",
+				value: 512,
+			},
+			rsvdKeys: []string{"test_key 0"},
+			attributes: map[string]any{
+				"test_key_1": 1,
+				"test_key_2": "test_value_2",
+			},
+			want: map[string]any{
+				"test_key_1": 512,
+				"test_key_2": "test_value_2",
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := &gcpAttributer{
+				attributes: tt.attributes,
+				logger:     &gcpLogger{rsvdKeys: tt.rsvdKeys},
+			}
+			a.AddAttribute(tt.args.key, tt.args.value)
+			if diff := cmp.Diff(a.attributes, tt.want); diff != "" {
+				t.Errorf("gcpAttributer.AddAttribute() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func Test_gcpAttributer_Logger(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		logger     *gcpLogger
+		attributes map[string]any
+	}
+	tests := []struct {
+		name string
+		fields
+		want *gcpLogger
+	}{
+		{
+			name: "success getting logger",
+			fields: fields{
+				logger: &gcpLogger{
+					root: &gcpLogger{
+						traceID: "root trace id",
+					},
+					logger:        &testLogger{},
+					traceID:       "1234567890",
+					rsvdKeys:      []string{"test reserved key 1", "test reserved key 2"},
+					attributes:    map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+					maxSeverity:   logging.Warning,
+					logCount:      2,
+					reqAttributes: map[string]any{"test_req_key_1": "test_req_value_1", "test_req_key_2": "test_req_value_2"},
+				},
+				attributes: map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
+			},
+			want: &gcpLogger{
+				root: &gcpLogger{
+					traceID: "root trace id",
+				},
+				traceID:       "1234567890",
+				rsvdKeys:      []string{"test reserved key 1", "test reserved key 2"},
+				attributes:    map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
+				maxSeverity:   logging.Default,
+				logCount:      0,
+				reqAttributes: nil,
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := &gcpAttributer{
+				logger:     tt.fields.logger,
+				attributes: tt.fields.attributes,
+			}
+
+			got := a.Logger()
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(gcpLogger{}), cmpopts.IgnoreFields(gcpLogger{}, "mu", "logger")); diff != "" {
+				t.Errorf("gcpAttributer.Logger() mismatch (-want +got):\n%s", diff)
+			}
+			gotGcpLogger, ok := got.(*gcpLogger)
+			if !ok {
+				t.Errorf("gcpAttributer.Logger() type %T, want %T", got, &gcpLogger{})
+				return
+			}
+			if gotGcpLogger.logger != a.logger.logger {
+				t.Errorf("got gcpLogger.logger is NOT the original logger")
+			}
 		})
 	}
 }
@@ -558,7 +849,17 @@ type testLogger struct {
 }
 
 func (t *testLogger) Log(e logging.Entry) {
-	_, _ = t.buf.WriteString(e.Payload.(map[string]any)["message"].(string))
+	logStr := "trace=" + e.Trace + " severity=" + e.Severity.String() + " span=" + e.SpanID + " trace_sampled=" + fmt.Sprint(e.TraceSampled)
+	attrs, ok := e.Payload.(map[string]any)
+	if ok {
+		for k, v := range attrs {
+			vStr, ok := v.(string)
+			if ok {
+				logStr += " " + k + "=" + vStr
+			}
+		}
+	}
+	_, _ = t.buf.WriteString(logStr)
 }
 
 type captureLogger struct {

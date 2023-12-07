@@ -6,10 +6,25 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
+)
+
+const (
+	awsTraceIDKey        = "trace_id"
+	awsSpanIDKey         = "span_id"
+	awsHTTPElapsedKey    = "http.elapsed"
+	awsHTTPMethodKey     = "http.method"
+	awsHTTPURLKey        = "http.url"
+	awsHTTPStatusCodeKey = "http.status_code"
+	awsHTTPRespLengthKey = "http.response.length"
+	awsHTTPUserAgentKey  = "http.user_agent"
+	awsHTTPRemoteIPKey   = "http.remote_ip"
+	awsHTTPSchemeKey     = "http.scheme"
+	awsHTTPProtoKey      = "http.proto"
 )
 
 // AWSExporter is an Exporter that logs to stdout in JSON format to be sent to cloudwatch
@@ -57,6 +72,7 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l.mu.Lock()
 	logCount := l.logCount
 	maxLevel := l.maxLevel
+	attributes := l.reqAttributes
 	l.mu.Unlock()
 
 	if !h.logAll && logCount == 0 {
@@ -70,31 +86,63 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sc := trace.SpanFromContext(r.Context()).SpanContext()
 
 	logAttr := []slog.Attr{
-		slog.Any("trace_id", xrayTraceID),
-		slog.Any("span_id", sc.SpanID().String()),
-		slog.String("http.elapsed", time.Since(begin).String()),
+		slog.Any(awsTraceIDKey, xrayTraceID),
+		slog.Any(awsSpanIDKey, sc.SpanID().String()),
+		slog.String(awsHTTPElapsedKey, time.Since(begin).String()),
 	}
 	logAttr = append(logAttr, httpAttributes(r, sw)...)
-	h.logger.LogAttrs(r.Context(), maxLevel, "Parent Log Entry", logAttr...)
+	for k, v := range attributes {
+		logAttr = append(logAttr, slog.Any(k, v))
+	}
+
+	h.logger.LogAttrs(r.Context(), maxLevel, parentLogEntry, logAttr...)
 }
 
 type awsLogger struct {
-	logger   awslog
-	traceID  string
-	mu       sync.Mutex
-	maxLevel slog.Level
-	logCount int
+	root          *awsLogger
+	logger        awslog
+	traceID       string
+	rsvdKeys      []string
+	rsvdReqKeys   []string
+	attributes    map[string]any // attributes for child (trace) logs
+	mu            sync.Mutex
+	maxLevel      slog.Level
+	logCount      int
+	reqAttributes map[string]any // attributes for the parent request log
 }
 
 func newAWSLogger(logger awslog, traceID string) *awsLogger {
-	return &awsLogger{
-		logger:  logger,
-		traceID: traceID,
+	l := &awsLogger{
+		logger:   logger,
+		traceID:  traceID,
+		rsvdKeys: []string{awsTraceIDKey, awsSpanIDKey},
+		rsvdReqKeys: []string{
+			awsTraceIDKey, awsSpanIDKey,
+			awsHTTPElapsedKey, awsHTTPMethodKey, awsHTTPURLKey, awsHTTPStatusCodeKey, awsHTTPRespLengthKey, awsHTTPUserAgentKey, awsHTTPRemoteIPKey, awsHTTPSchemeKey, awsHTTPProtoKey,
+		},
+		reqAttributes: make(map[string]any),
+		attributes:    make(map[string]any),
 	}
+	l.root = l // root is self
+
+	return l
 }
 
 type awslog interface {
 	LogAttrs(ctx context.Context, level slog.Level, msg string, attrs ...slog.Attr)
+}
+
+// newChild returns a new child awsLogger
+func (l *awsLogger) newChild() *awsLogger {
+	return &awsLogger{
+		root:          l.root,
+		logger:        l.logger,
+		traceID:       l.traceID,
+		rsvdKeys:      l.rsvdKeys,
+		rsvdReqKeys:   l.rsvdReqKeys,
+		attributes:    make(map[string]any),
+		reqAttributes: nil, // reqAttributes is only used in the root logger, never the child.
+	}
 }
 
 // Debug logs a debug message.
@@ -137,33 +185,87 @@ func (l *awsLogger) Errorf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, slog.LevelError, fmt.Sprintf(format, v...))
 }
 
-func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
-	l.mu.Lock()
-	if l.maxLevel < level {
-		l.maxLevel = level
+// AddRequestAttribute adds an attribute (key, value) for the parent request log
+// If the key matches a reserved key, it will be prefixed with "custom_"
+// If the key already exists, its value is overwritten
+func (l *awsLogger) AddRequestAttribute(key string, value any) {
+	if slices.Contains(l.rsvdReqKeys, key) {
+		key = customPrefix + key
 	}
-	l.logCount++
-	l.mu.Unlock()
+
+	l.root.mu.Lock()
+	defer l.root.mu.Unlock()
+	l.root.reqAttributes[key] = value
+}
+
+// WithAttributes returns an attributer that can be used to add child (trace) log attributes
+func (l *awsLogger) WithAttributes() attributer {
+	attrs := make(map[string]any)
+	for k, v := range l.attributes {
+		attrs[k] = v
+	}
+
+	return &awsAttributer{logger: l, attributes: attrs}
+}
+
+func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
+	l.root.mu.Lock()
+	if l.root.maxLevel < level {
+		l.root.maxLevel = level
+	}
+	l.root.logCount++
+	l.root.mu.Unlock()
 
 	span := trace.SpanFromContext(ctx)
 	attr := []slog.Attr{
-		slog.String("trace_id", l.traceID),
-		slog.String("span_id", span.SpanContext().SpanID().String()),
+		slog.String(awsTraceIDKey, l.traceID),
+		slog.String(awsSpanIDKey, span.SpanContext().SpanID().String()),
+	}
+	for k, v := range l.attributes {
+		attr = append(attr, slog.Any(k, v))
 	}
 	l.logger.LogAttrs(ctx, level, message, attr...)
+}
+
+var _ attributer = (*awsAttributer)(nil)
+
+type awsAttributer struct {
+	logger     *awsLogger
+	attributes map[string]any
+}
+
+// AddAttribute adds an attribute (key, value) for the child (trace) log
+// If the key matches a reserved key, it will be prefixed with "custom_"
+// If the key already exists, its value is overwritten
+func (a *awsAttributer) AddAttribute(key string, value any) {
+	if slices.Contains(a.logger.rsvdKeys, key) {
+		key = customPrefix + key
+	}
+
+	a.attributes[key] = value
+}
+
+// Logger returns a ctxLogger with the child (trace) attributes embedded
+func (a *awsAttributer) Logger() ctxLogger {
+	l := a.logger.newChild()
+	for k, v := range a.attributes {
+		l.attributes[k] = v
+	}
+
+	return l
 }
 
 // httpAttributes returns a slice of slog.Attr for the http request and response
 func httpAttributes(r *http.Request, sw *statusWriter) []slog.Attr {
 	return []slog.Attr{
-		slog.String("http.method", r.Method),
-		slog.String("http.url", r.URL.String()),
-		slog.Int("http.status_code", sw.Status()),
-		slog.Int64("http.response.length", sw.length),
-		slog.String("http.user_agent", r.UserAgent()),
-		slog.String("http.remote_ip", r.RemoteAddr),
-		slog.String("http.scheme", r.URL.Scheme),
-		slog.String("http.proto", r.Proto),
+		slog.String(awsHTTPMethodKey, r.Method),
+		slog.String(awsHTTPURLKey, r.URL.String()),
+		slog.Int(awsHTTPStatusCodeKey, sw.Status()),
+		slog.Int64(awsHTTPRespLengthKey, sw.length),
+		slog.String(awsHTTPUserAgentKey, r.UserAgent()),
+		slog.String(awsHTTPRemoteIPKey, r.RemoteAddr),
+		slog.String(awsHTTPSchemeKey, r.URL.Scheme),
+		slog.String(awsHTTPProtoKey, r.Proto),
 	}
 }
 

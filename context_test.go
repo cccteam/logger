@@ -31,14 +31,14 @@ func Test_fromCtx(t *testing.T) {
 		},
 		{
 			name: "StdErrLogger: ctx nil",
-			want: &stdErrLogger{},
+			want: &stdErrLogger{attributes: map[string]any{}},
 		},
 		{
 			name: "StdErrLogger: ctx empty",
 			args: args{
 				ctx: context.Background(),
 			},
-			want: &stdErrLogger{},
+			want: &stdErrLogger{attributes: map[string]any{}},
 		},
 	}
 	for _, tt := range tests {
@@ -65,14 +65,14 @@ func Test_fromReq(t *testing.T) {
 	}{
 		{
 			name: "nil request",
-			want: &stdErrLogger{},
+			want: &stdErrLogger{attributes: map[string]any{}},
 		},
 		{
 			name: "empty request ctx",
 			args: args{
 				r: &http.Request{},
 			},
-			want: &stdErrLogger{},
+			want: &stdErrLogger{attributes: map[string]any{}},
 		},
 	}
 	for _, tt := range tests {

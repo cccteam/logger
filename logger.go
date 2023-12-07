@@ -9,9 +9,16 @@
 // The AWSExporter supports log correlation to AWS X-Ray if you instrument your code with tracing.
 package logger
 
+//go:generate mockgen -source context.go -package $GOPACKAGE -destination mock_context_test.go
+
 import (
 	"context"
 	"net/http"
+)
+
+const (
+	parentLogEntry = "Parent Log Entry"
+	customPrefix   = "custom_"
 )
 
 // Logger implements logging methods for this package
@@ -76,4 +83,43 @@ func (l *Logger) Error(v any) {
 // Errorf logs an error message with format.
 func (l *Logger) Errorf(format string, v ...any) {
 	l.lg.Errorf(l.ctx, format, v...)
+}
+
+// AddRequestAttribute adds an attribute (kv) for the parent request log and returns a reference to the original logger for method chaining purposes
+// If the key matches a reserved key, it will be prefixed with "custom_"
+// If the key already exists, its value is overwritten
+func (l *Logger) AddRequestAttribute(key string, value any) *Logger {
+	l.lg.AddRequestAttribute(key, value)
+
+	return l
+}
+
+// WithAttributes returns an AttributerLogger that can be used to add child (trace) log attributes
+func (l *Logger) WithAttributes() *AttributerLogger {
+	return &AttributerLogger{
+		logger:     l,
+		attributer: l.lg.WithAttributes(),
+	}
+}
+
+type AttributerLogger struct {
+	logger     *Logger
+	attributer attributer
+}
+
+// AddAttribute adds an attribute (kv) for the child (trace) log and returns a reference to the original AttributerLogger for method chaining purposes
+// If the key matches a reserved key, it will be prefixed with "custom_"
+// If the key already exists, its value is overwritten
+func (a *AttributerLogger) AddAttribute(key string, value any) *AttributerLogger {
+	a.attributer.AddAttribute(key, value)
+
+	return a
+}
+
+// Logger returns a Logger with the child (trace) attributes embedded
+func (a *AttributerLogger) Logger() *Logger {
+	return &Logger{
+		ctx: a.logger.ctx,
+		lg:  a.attributer.Logger(),
+	}
 }

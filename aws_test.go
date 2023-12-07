@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -165,7 +167,7 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 			wantLevel: slog.LevelWarn,
 		},
 		{
-			name: "logAll=true no logging",
+			name: "logging for error status",
 			fields: fields{
 				projectID: "my-big-project",
 				logAll:    true,
@@ -182,12 +184,20 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 			t.Parallel()
 
 			var handlerCalled bool
+
 			l := &captureSLogger{}
 			handler := &awsHandler{
 				logger: l,
 				logAll: tt.fields.logAll,
 				next: http.HandlerFunc(
 					func(w http.ResponseWriter, r *http.Request) {
+						awsLgr, ok := Req(r).lg.(*awsLogger)
+						if !ok {
+							t.Fatal("Failed to get awsLogger from request")
+						}
+						awsLgr.reqAttributes["test_req_key_1"] = "test_req_value_1"
+						awsLgr.reqAttributes["test_req_key_2"] = "test_req_value_2"
+
 						for i := 0; i < tt.args.logs; i++ {
 							switch tt.args.level {
 							case slog.LevelInfo:
@@ -206,28 +216,23 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 				),
 			}
 
-			w := httptest.NewRecorder()
 			r := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			handler.ServeHTTP(w, r)
+			handler.ServeHTTP(httptest.NewRecorder(), r)
 
 			if !handlerCalled {
 				t.Errorf("Failed to call handler")
 			}
-			if tt.args.logs == 0 {
+			if !tt.fields.logAll && tt.args.logs == 0 {
 				return
 			}
 			if l.level != tt.wantLevel {
 				t.Errorf("Level = %v, want %v", l.level, tt.wantLevel)
 			}
-
-			if l.attrs == nil {
-				t.Errorf("Attrs = %v, want %v", l.attrs, "not nil")
+			if len(l.attrs) != 13 {
+				t.Errorf("Expected %d request attributes, got %d", 13, len(l.attrs))
 			}
-
-			if pl := l.msg; pl != "" {
-				if pl != "Parent Log Entry" {
-					t.Errorf("Message = %v, want %v", pl, "Parent Log Entry")
-				}
+			if l.msg != "Parent Log Entry" {
+				t.Errorf("Message = %v, want %v", l.msg, "Parent Log Entry")
 			}
 		})
 	}
@@ -306,8 +311,12 @@ func Test_newAWSLogger(t *testing.T) {
 				traceID: "1234567890",
 			},
 			want: &awsLogger{
-				logger:  &testSlogger{},
-				traceID: "1234567890",
+				logger:        &testSlogger{},
+				traceID:       "1234567890",
+				rsvdKeys:      []string{"trace_id", "span_id"},
+				rsvdReqKeys:   []string{"trace_id", "span_id", "http.elapsed", "http.method", "http.url", "http.status_code", "http.response.length", "http.user_agent", "http.remote_ip", "http.scheme", "http.proto"},
+				reqAttributes: map[string]any{},
+				attributes:    map[string]any{},
 			},
 		},
 	}
@@ -317,8 +326,11 @@ func Test_newAWSLogger(t *testing.T) {
 			t.Parallel()
 
 			got := newAWSLogger(tt.args.logger, tt.args.traceID)
-			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreFields(awsLogger{}, "logger", "mu"), cmp.AllowUnexported(awsLogger{})); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreFields(awsLogger{}, "logger", "mu", "root"), cmp.AllowUnexported(awsLogger{})); diff != "" {
 				t.Errorf("newAWSLogger() mismatch (-want +got):\n%s", diff)
+			}
+			if got.root != got {
+				t.Errorf("newAWSLogger().root is not self")
 			}
 		})
 	}
@@ -327,6 +339,10 @@ func Test_newAWSLogger(t *testing.T) {
 func Test_awsLogger(t *testing.T) {
 	t.Parallel()
 
+	type fields struct {
+		traceID    string
+		attributes map[string]any
+	}
 	type args struct {
 		format string
 		v      []any
@@ -334,6 +350,7 @@ func Test_awsLogger(t *testing.T) {
 	}
 	tests := []struct {
 		name       string
+		fields     fields
 		args       args
 		wantDebug  string
 		wantDebugf string
@@ -346,6 +363,10 @@ func Test_awsLogger(t *testing.T) {
 	}{
 		{
 			name: "Strings",
+			fields: fields{
+				traceID:    "1234567890",
+				attributes: map[string]any{"a test key": "a test value"},
+			},
 			args: args{
 				format: "Formatted %s",
 				v:      []any{"Message"},
@@ -362,6 +383,10 @@ func Test_awsLogger(t *testing.T) {
 		},
 		{
 			name: "String & Error",
+			fields: fields{
+				traceID:    "1234567890",
+				attributes: map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+			},
 			args: args{
 				format: "Formatted %s",
 				v:      []any{"Message"},
@@ -382,62 +407,333 @@ func Test_awsLogger(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
+			ctx, span := otel.Tracer("test tracer").Start(context.Background(), "a test")
 			var buf bytes.Buffer
 
 			l := &awsLogger{
 				logger: &testSlogger{
 					buf: &buf,
 				},
+				attributes: tt.fields.attributes,
+				traceID:    tt.fields.traceID,
+			}
+			l.root = l
+
+			verifyLog := func(log, methodName, expectedPrefix string, expectedLvl slog.Level) {
+				if !strings.HasPrefix(log, expectedPrefix) {
+					t.Errorf("awsLogger.%s() = %q, missing prefix %q", methodName, log, expectedPrefix)
+				}
+
+				expectedVals := []string{
+					"trace_id=" + tt.fields.traceID,
+					"span_id=" + span.SpanContext().SpanID().String(),
+					"level=" + expectedLvl.String(),
+				}
+				for k, v := range tt.fields.attributes {
+					expectedVals = append(expectedVals, slog.Any(k, v).String())
+				}
+				for _, v := range expectedVals {
+					if !strings.Contains(log, v) {
+						t.Errorf("awsLogger.%s() = %q, missing: %q", methodName, log, v)
+					}
+				}
 			}
 
 			l.Debug(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantDebug {
-				t.Errorf("stdErrLogger.Debug() value = %v, wantValue %v", s, tt.wantDebug)
-			}
+			verifyLog(buf.String(), "Debug", tt.wantDebug, slog.LevelDebug)
 			buf.Reset()
 
 			l.Debugf(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantDebugf {
-				t.Errorf("stdErrLogger.Debug() value = %v, wantValue %v", s, tt.wantDebugf)
-			}
+			verifyLog(buf.String(), "Debugf", tt.wantDebugf, slog.LevelDebug)
 			buf.Reset()
 
 			l.Info(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantInfo {
-				t.Errorf("stdErrLogger.Info() value = %v, wantValue %v", s, tt.wantInfo)
-			}
+			verifyLog(buf.String(), "Info", tt.wantInfo, slog.LevelInfo)
 			buf.Reset()
 
 			l.Infof(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantInfof {
-				t.Errorf("stdErrLogger.Info() value = %v, wantValue %v", s, tt.wantInfof)
-			}
+			verifyLog(buf.String(), "Infof", tt.wantInfof, slog.LevelInfo)
 			buf.Reset()
 
 			l.Warn(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantWarn {
-				t.Errorf("stdErrLogger.Warn() value = %v, wantValue %v", s, tt.wantWarn)
-			}
+			verifyLog(buf.String(), "Warn", tt.wantWarn, slog.LevelWarn)
 			buf.Reset()
 
 			l.Warnf(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantWarnf {
-				t.Errorf("stdErrLogger.Warn() value = %v, wantValue %v", s, tt.wantWarnf)
-			}
+			verifyLog(buf.String(), "Warnf", tt.wantWarnf, slog.LevelWarn)
 			buf.Reset()
 
 			l.Error(ctx, tt.args.v2)
-			if s := buf.String(); s != tt.wantError {
-				t.Errorf("stdErrLogger.Error() value = %v, wantValue %v", s, tt.wantError)
-			}
+			verifyLog(buf.String(), "Error", tt.wantError, slog.LevelError)
 			buf.Reset()
 
 			l.Errorf(ctx, tt.args.format, tt.args.v...)
-			if s := buf.String(); s != tt.wantErrorf {
-				t.Errorf("stdErrLogger.Error() value = %v, wantValue %v", s, tt.wantErrorf)
-			}
+			verifyLog(buf.String(), "Errorf", tt.wantErrorf, slog.LevelError)
 			buf.Reset()
+		})
+	}
+}
+
+func Test_awsLogger_AddRequestAttribute(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		root        *awsLogger
+		rsvdReqKeys []string
+	}
+	type args struct {
+		key   string
+		value any
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   map[string]any
+	}{
+		{
+			name: "prefix reserved key",
+			fields: fields{
+				root: &awsLogger{
+					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+				},
+				rsvdReqKeys: []string{"test_key 1", "test_key"},
+			},
+			args: args{
+				key:   "test_key",
+				value: 512,
+			},
+			want: map[string]any{"test_key_2": "test_value_2", "custom_test_key": 512},
+		},
+		{
+			name: "add request attribute (non-reserved key)",
+			fields: fields{
+				root: &awsLogger{
+					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+				},
+				rsvdReqKeys: []string{"test_key 1"},
+			},
+			args: args{
+				key:   "test_key",
+				value: 512,
+			},
+			want: map[string]any{"test_key_2": "test_value_2", "test_key": 512},
+		},
+		{
+			name: "overwrite request attribute value",
+			fields: fields{
+				root: &awsLogger{
+					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+				},
+				rsvdReqKeys: []string{"test_key 1"},
+			},
+			args: args{
+				key:   "test_key_2",
+				value: 512,
+			},
+			want: map[string]any{"test_key_2": 512},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := &awsLogger{
+				root:        tt.fields.root,
+				rsvdReqKeys: tt.fields.rsvdReqKeys,
+			}
+			l.AddRequestAttribute(tt.args.key, tt.args.value)
+			if diff := cmp.Diff(l.root.reqAttributes, tt.want); diff != "" {
+				t.Errorf("awsLogger.AddRequestAttribute() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func Test_awsLogger_WithAttributes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		attributes map[string]any
+		want       *awsAttributer
+	}{
+		{
+			name: "with attributes success",
+			attributes: map[string]any{
+				"test_key_1": "test_value_1",
+				"test_key_2": "test_value_2",
+			},
+			want: &awsAttributer{
+				attributes: map[string]any{
+					"test_key_1": "test_value_1",
+					"test_key_2": "test_value_2",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := &awsLogger{
+				attributes: tt.attributes,
+			}
+			got := l.WithAttributes()
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(awsAttributer{}), cmpopts.IgnoreFields(awsAttributer{}, "logger")); diff != "" {
+				t.Errorf("awsLogger.WithAttributes() mismatch (-want +got):\n%s", diff)
+			}
+			if a, ok := got.(*awsAttributer); !ok {
+				t.Errorf("awsLogger.WithAttributes() type %T, want %T", got, &awsAttributer{})
+			} else if a.logger != l {
+				t.Errorf("awsLogger.WithAttributes().logger != awsLogger")
+			}
+		})
+	}
+}
+
+func Test_awsAttributer_AddAttribute(t *testing.T) {
+	t.Parallel()
+	type args struct {
+		key   string
+		value any
+	}
+	tests := []struct {
+		name       string
+		args       args
+		rsvdKeys   []string
+		attributes map[string]any
+		want       map[string]any
+	}{
+		{
+			name: "prefixing reserved key",
+			args: args{
+				key:   "test_key_0",
+				value: 512,
+			},
+			rsvdKeys: []string{"test_key 0", "test_key_0"},
+			attributes: map[string]any{
+				"test_key_1": 1,
+				"test_key_2": "test_value_2",
+			},
+			want: map[string]any{
+				"test_key_1":        1,
+				"test_key_2":        "test_value_2",
+				"custom_test_key_0": 512,
+			},
+		},
+		{
+			name: "add attribute (non-reserved key)",
+			args: args{
+				key:   "test_key_0",
+				value: 512,
+			},
+			rsvdKeys: []string{"test_key 0"},
+			attributes: map[string]any{
+				"test_key_1": 1,
+				"test_key_2": "test_value_2",
+			},
+			want: map[string]any{
+				"test_key_1": 1,
+				"test_key_2": "test_value_2",
+				"test_key_0": 512,
+			},
+		},
+		{
+			name: "overwriting attribute value",
+			args: args{
+				key:   "test_key_1",
+				value: 512,
+			},
+			rsvdKeys: []string{"test_key 0"},
+			attributes: map[string]any{
+				"test_key_1": 1,
+				"test_key_2": "test_value_2",
+			},
+			want: map[string]any{
+				"test_key_1": 512,
+				"test_key_2": "test_value_2",
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := &awsAttributer{
+				attributes: tt.attributes,
+				logger:     &awsLogger{rsvdKeys: tt.rsvdKeys},
+			}
+			a.AddAttribute(tt.args.key, tt.args.value)
+			if diff := cmp.Diff(a.attributes, tt.want); diff != "" {
+				t.Errorf("awsAttributer.AddAttribute() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func Test_awsAttributer_Logger(t *testing.T) {
+	t.Parallel()
+	type fields struct {
+		logger     *awsLogger
+		attributes map[string]any
+	}
+	tests := []struct {
+		name string
+		fields
+		want *awsLogger
+	}{
+		{
+			name: "success getting logger",
+			fields: fields{
+				logger: &awsLogger{
+					root: &awsLogger{
+						traceID: "root trace id",
+					},
+					logger:        &testSlogger{},
+					traceID:       "1234567890",
+					rsvdKeys:      []string{"test reserved key 1", "test reserved key 2"},
+					rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
+					attributes:    map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+					maxLevel:      slog.LevelWarn,
+					logCount:      2,
+					reqAttributes: map[string]any{"test_req_key_1": "test_req_value_1", "test_req_key_2": "test_req_value_2"},
+				},
+				attributes: map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
+			},
+			want: &awsLogger{
+				root: &awsLogger{
+					traceID: "root trace id",
+				},
+				traceID:       "1234567890",
+				rsvdKeys:      []string{"test reserved key 1", "test reserved key 2"},
+				rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
+				attributes:    map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
+				maxLevel:      slog.LevelInfo,
+				logCount:      0,
+				reqAttributes: nil,
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := &awsAttributer{
+				logger:     tt.fields.logger,
+				attributes: tt.fields.attributes,
+			}
+
+			got := a.Logger()
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(awsLogger{}), cmpopts.IgnoreFields(awsLogger{}, "mu", "logger")); diff != "" {
+				t.Errorf("awsAttributer.Logger() mismatch (-want +got):\n%s", diff)
+			}
+			gotAwsLogger, ok := got.(*awsLogger)
+			if !ok {
+				t.Errorf("awsAttributer.Logger() type %T, want %T", got, &awsLogger{})
+				return
+			}
+			if gotAwsLogger.logger != a.logger.logger {
+				t.Errorf("got awsLogger.logger is NOT the original logger")
+			}
 		})
 	}
 }
@@ -446,8 +742,8 @@ type testSlogger struct {
 	buf *bytes.Buffer
 }
 
-func (t *testSlogger) LogAttrs(_ context.Context, _ slog.Level, msg string, _ ...slog.Attr) {
-	_, _ = t.buf.WriteString(msg)
+func (t *testSlogger) LogAttrs(_ context.Context, level slog.Level, msg string, attrs ...slog.Attr) {
+	_, _ = fmt.Fprint(t.buf, msg, "level="+level.String(), attrs)
 }
 
 type captureSLogger struct {

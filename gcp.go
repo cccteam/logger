@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -11,6 +12,8 @@ import (
 	"contrib.go.opencensus.io/exporter/stackdriver/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
+
+const gcpMessageKey = "message"
 
 // GoogleCloudExporter implements exporting to Google Cloud Logging
 type GoogleCloudExporter struct {
@@ -71,6 +74,10 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l.mu.Lock()
 	logCount := l.logCount
 	maxSeverity := l.maxSeverity
+	attributes := make(map[string]any)
+	for k, v := range l.reqAttributes {
+		attributes[k] = v
+	}
 	l.mu.Unlock()
 
 	if !g.logAll && logCount == 0 {
@@ -84,15 +91,15 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	sc := trace.SpanFromContext(r.Context()).SpanContext()
 
+	attributes[gcpMessageKey] = parentLogEntry
+
 	g.parentLogger.Log(logging.Entry{
 		Timestamp:    begin,
 		Severity:     maxSeverity,
 		Trace:        traceID,
 		SpanID:       sc.SpanID().String(),
 		TraceSampled: sc.IsSampled(),
-		Payload: map[string]any{
-			"message": "Parent Log Entry",
-		},
+		Payload:      attributes,
 		HTTPRequest: &logging.HTTPRequest{
 			Request:      r,
 			RequestSize:  requestSize(r.Header.Get("Content-Length")),
@@ -126,17 +133,39 @@ type logger interface {
 }
 
 type gcpLogger struct {
-	lg          logger
-	traceID     string
-	mu          sync.Mutex
-	maxSeverity logging.Severity
-	logCount    int
+	root          *gcpLogger
+	logger        logger
+	traceID       string
+	rsvdKeys      []string
+	attributes    map[string]any // attributes for child (trace) logs
+	mu            sync.Mutex
+	maxSeverity   logging.Severity
+	logCount      int
+	reqAttributes map[string]any // attributes for the parent request log
 }
 
 func newGCPLogger(lg logger, traceID string) *gcpLogger {
+	l := &gcpLogger{
+		logger:        lg,
+		traceID:       traceID,
+		rsvdKeys:      []string{gcpMessageKey},
+		reqAttributes: make(map[string]any),
+		attributes:    make(map[string]any),
+	}
+	l.root = l // root is self
+
+	return l
+}
+
+// newChild returns a new child gcpLogger
+func (l *gcpLogger) newChild() *gcpLogger {
 	return &gcpLogger{
-		lg:      lg,
-		traceID: traceID,
+		root:          l.root,
+		logger:        l.logger,
+		traceID:       l.traceID,
+		rsvdKeys:      l.rsvdKeys,
+		attributes:    make(map[string]any),
+		reqAttributes: nil, // reqAttributes is only used in the root logger, never the child.
 	}
 }
 
@@ -180,29 +209,83 @@ func (l *gcpLogger) Errorf(ctx context.Context, format string, v ...any) {
 	l.log(ctx, logging.Error, fmt.Sprintf(format, v...))
 }
 
-func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, p any) {
-	l.mu.Lock()
-	if l.maxSeverity < severity {
-		l.maxSeverity = severity
+// AddRequestAttribute adds an attribute (key, value) for the parent request log
+// If the key matches a reserved key, it will be prefixed with "custom_"
+// If the key already exists, its value is overwritten
+func (l *gcpLogger) AddRequestAttribute(key string, value any) {
+	if slices.Contains(l.rsvdKeys, key) {
+		key = customPrefix + key
 	}
-	l.logCount++
-	l.mu.Unlock()
 
-	if err, ok := p.(error); ok {
-		p = err.Error()
+	l.root.mu.Lock()
+	defer l.root.mu.Unlock()
+	l.root.reqAttributes[key] = value
+}
+
+// WithAttributes returns an attributer that can be used to add child (trace) log attributes
+func (l *gcpLogger) WithAttributes() attributer {
+	attrs := make(map[string]any)
+	for k, v := range l.attributes {
+		attrs[k] = v
+	}
+
+	return &gcpAttributer{logger: l, attributes: attrs}
+}
+
+func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, msg any) {
+	l.root.mu.Lock()
+	if l.root.maxSeverity < severity {
+		l.root.maxSeverity = severity
+	}
+	l.root.logCount++
+	l.root.mu.Unlock()
+
+	if err, ok := msg.(error); ok {
+		msg = err.Error()
 	}
 
 	span := trace.SpanFromContext(ctx)
+	attrs := make(map[string]any)
+	for k, v := range l.attributes {
+		attrs[k] = v
+	}
+	attrs[gcpMessageKey] = msg
 
-	l.lg.Log(
+	l.logger.Log(
 		logging.Entry{
-			Payload: map[string]any{
-				"message": p,
-			},
+			Payload:      attrs,
 			Severity:     severity,
 			Trace:        l.traceID,
 			SpanID:       span.SpanContext().SpanID().String(),
 			TraceSampled: span.SpanContext().IsSampled(),
 		},
 	)
+}
+
+var _ attributer = (*gcpAttributer)(nil)
+
+type gcpAttributer struct {
+	logger     *gcpLogger
+	attributes map[string]any
+}
+
+// AddAttribute adds an attribute (key, value) for the child (trace) log
+// If the key matches a reserved key, it will be prefixed with "custom_"
+// If the key already exists, its value is overwritten
+func (a *gcpAttributer) AddAttribute(key string, value any) {
+	if slices.Contains(a.logger.rsvdKeys, key) {
+		key = customPrefix + key
+	}
+
+	a.attributes[key] = value
+}
+
+// Logger returns a ctxLogger with the child (trace) attributes embedded
+func (a *gcpAttributer) Logger() ctxLogger {
+	l := a.logger.newChild()
+	for k, v := range a.attributes {
+		l.attributes[k] = v
+	}
+
+	return l
 }
