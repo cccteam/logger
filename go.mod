@@ -3,7 +3,7 @@ module github.com/cccteam/logger
 go 1.21.5
 
 require (
-	cloud.google.com/go/logging v1.8.1
+	cloud.google.com/go/logging v1.9.0
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.14
 	github.com/go-playground/errors/v5 v5.4.0
 	github.com/go-test/deep v1.1.0
