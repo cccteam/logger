@@ -70,7 +70,7 @@ func TestLogger(t *testing.T) {
 
 			var buf bytes.Buffer
 			ctxLgr := &testCtxLogger{buf: &buf}
-			ctx := newContext(context.WithValue(context.Background(), ctxLgr, " testCtxValue"), ctxLgr)
+			ctx := NewContext(context.WithValue(context.Background(), ctxLgr, " testCtxValue"), ctxLgr)
 
 			r := &http.Request{}
 			r = r.WithContext(ctx)

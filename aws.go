@@ -64,7 +64,7 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	begin := time.Now()
 	xrayTraceID := awsTraceIDFromRequest(r, generateID)
 	l := newAWSLogger(h.logger, xrayTraceID)
-	r = r.WithContext(newContext(r.Context(), l))
+	r = r.WithContext(NewContext(r.Context(), l))
 	sw := &statusWriter{ResponseWriter: w}
 
 	h.next.ServeHTTP(sw, r)

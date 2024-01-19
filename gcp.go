@@ -66,7 +66,7 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	begin := time.Now()
 	traceID := gcpTraceIDFromRequest(r, g.projectID, generateID)
 	l := newGCPLogger(g.childLogger, traceID)
-	r = r.WithContext(newContext(r.Context(), l))
+	r = r.WithContext(NewContext(r.Context(), l))
 	sw := &statusWriter{ResponseWriter: w}
 
 	g.next.ServeHTTP(sw, r)

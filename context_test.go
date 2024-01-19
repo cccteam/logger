@@ -25,7 +25,7 @@ func Test_fromCtx(t *testing.T) {
 		{
 			name: "logger from ctx",
 			args: args{
-				newContext(context.Background(), &testLogger{}),
+				NewContext(context.Background(), &testLogger{}),
 			},
 			want: &testLogger{},
 		},
