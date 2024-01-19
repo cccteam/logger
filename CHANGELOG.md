@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/cccteam/logger/compare/v0.1.4...v0.1.5) (2024-01-19)
+
+
+### Features
+
+* Add public function for adding a logger to a context ([#25](https://github.com/cccteam/logger/issues/25)) ([43f584e](https://github.com/cccteam/logger/commit/43f584e9b3b2e78a57abb274ff50521b23862386))
+
 ## [0.1.4](https://github.com/cccteam/logger/compare/v0.1.3...v0.1.4) (2023-12-07)
 
 
