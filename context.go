@@ -34,8 +34,8 @@ func fromReq(r *http.Request) ctxLogger {
 	return fromCtx(r.Context())
 }
 
-// NewContext returns a copy of the parent context and associates it with the provided logger.
-func NewContext(ctx context.Context, l ctxLogger) context.Context {
+// newContext returns a copy of the parent context and associates it with the provided logger.
+func newContext(ctx context.Context, l ctxLogger) context.Context {
 	return context.WithValue(ctx, logKey, l)
 }
 

@@ -36,6 +36,11 @@ func Ctx(ctx context.Context) *Logger {
 	}
 }
 
+// NewCtx associates the logger with the context and returns the resulting context
+func NewCtx(ctx context.Context, l *Logger) context.Context {
+	return newContext(ctx, l.lg)
+}
+
 // Req returns the logger from the http request. If
 // no logger is found, it will write to stderr
 func Req(r *http.Request) *Logger {
