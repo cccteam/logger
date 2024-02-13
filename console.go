@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/logging"
-	"github.com/containerd/containerd/contrib/apparmor"
 )
 
 const (
@@ -87,8 +86,6 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		msg += fmt.Sprintf(" %s=%v", k, v)
 	}
 	l.console(maxSeverity, severityColor(maxSeverity), msg)
-
-	apparmor.DumpDefaultProfile("some-profile-name")
 }
 
 type consoleLogger struct {
