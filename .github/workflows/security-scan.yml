@@ -2,7 +2,7 @@ name: Security Scan
 
 on:
   schedule:
-    - cron: "0 0 * * *" # Daily at midnight
+    - cron: '0 14 * * *' # Daily at 8:00 AM CDT
 
 env:
   SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
