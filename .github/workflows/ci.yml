@@ -13,6 +13,3 @@ jobs:
     with:
       go-version: "1.21.6"
       build-tags: '["", "dev", "consolelog"]'
-
-  closes-issue-check:
-    uses: cccteam/github-workflows/.github/workflows/closes-issue-check.yml@main
