@@ -17,8 +17,7 @@ jobs:
       slack-channel-id: ${{ steps.slack-setup.outputs.SLACK_CHANNEL_ID }}
     steps:
       - id: slack-setup
-        run: |
-          echo "SLACK_CHANNEL_ID=${env.SLACK_CHANNEL_ID}" >> $GITHUB_OUTPUT
+        run: echo "SLACK_CHANNEL_ID= ${{ env.SLACK_CHANNEL_ID }}" >> $GITHUB_OUTPUT
 
   security_scan:
     needs: env-setup
