@@ -4,12 +4,25 @@ on:
   schedule:
     - cron: "0 0 * * *" # Daily at midnight
 
+env:
+  SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+
 jobs:
+  env-setup:
+    runs-on: ubuntu-latest
+    outputs:
+      slack-channel-id: ${{ steps.slack-setup.outputs.SLACK_CHANNEL_ID }}
+    steps:
+      - id: slack-setup
+        run: |
+          echo "SLACK_CHANNEL_ID=${env.SLACK_CHANNEL_ID}" >> $GITHUB_OUTPUT
+
   security_scan:
+    needs: env-setup
     uses: cccteam/github-workflows/.github/workflows/golang-security-scan.yml@v1.1.0
     with:
       go-version: "1.21.6"
-      slack-channel-id: ""
+      slack-channel-id: ${{ needs.env-setup.outputs.slack-channel-id }}
       execute-trivy-scan: false
     secrets:
       SLACK_BOT_TOKEN: ${{ secrets.CCC_SLACK_BOT_TOKEN }}
