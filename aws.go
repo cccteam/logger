@@ -79,7 +79,7 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if sw.Status() > 399 && maxLevel < slog.LevelError {
+	if sw.Status() > 499 && maxLevel < slog.LevelError {
 		maxLevel = slog.LevelError
 	}
 

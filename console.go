@@ -75,7 +75,7 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l.mu.Unlock()
 
 	// status code should also set the minimum maxSeverity to Error
-	if sw.Status() > 399 && maxSeverity < logging.Error {
+	if sw.Status() > 499 && maxSeverity < logging.Error {
 		maxSeverity = logging.Error
 	}
 
