@@ -105,7 +105,7 @@ func newConsoleLogger(r *http.Request, noColor bool) *consoleLogger {
 	l := &consoleLogger{
 		r: r, noColor: noColor,
 		rsvdReqKeys:   []string{cslReqSize, cslRespSize, cslLogCount},
-		maxSeverity:   logging.Debug,
+		maxSeverity:   logging.Info,
 		reqAttributes: make(map[string]any),
 		attributes:    make(map[string]any),
 	}
