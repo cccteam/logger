@@ -470,6 +470,10 @@ func Test_awsLogger(t *testing.T) {
 			l.Errorf(ctx, tt.args.format, tt.args.v...)
 			verifyLog(buf.String(), "Errorf", tt.wantErrorf, slog.LevelError)
 			buf.Reset()
+
+			if l.TraceID() != tt.fields.traceID {
+				t.Errorf("awsLogger.TraceID() = %v, want %v", l.TraceID(), tt.fields.traceID)
+			}
 		})
 	}
 }
