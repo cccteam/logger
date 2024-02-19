@@ -208,6 +208,11 @@ func (l *awsLogger) WithAttributes() attributer {
 	return &awsAttributer{logger: l, attributes: attrs}
 }
 
+// TraceID returns the trace ID of the request logs
+func (l *awsLogger) TraceID() string {
+	return l.traceID
+}
+
 func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
 	l.root.mu.Lock()
 	if l.root.maxLevel < level {

@@ -190,6 +190,11 @@ func (l *consoleLogger) WithAttributes() attributer {
 	return &consoleAttributer{logger: l, attributes: attrs}
 }
 
+// TraceID returns an empty string for the console logger
+func (l *consoleLogger) TraceID() string {
+	return ""
+}
+
 func (l *consoleLogger) console(level logging.Severity, c color, msg string) {
 	for k, v := range l.attributes {
 		msg += fmt.Sprintf(", %s=%v", k, v)

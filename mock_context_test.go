@@ -138,6 +138,20 @@ func (mr *MockctxLoggerMockRecorder) Infof(ctx, format any, v ...any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Infof", reflect.TypeOf((*MockctxLogger)(nil).Infof), varargs...)
 }
 
+// TraceID mocks base method.
+func (m *MockctxLogger) TraceID() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TraceID")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// TraceID indicates an expected call of TraceID.
+func (mr *MockctxLoggerMockRecorder) TraceID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TraceID", reflect.TypeOf((*MockctxLogger)(nil).TraceID))
+}
+
 // Warn mocks base method.
 func (m *MockctxLogger) Warn(ctx context.Context, v any) {
 	m.ctrl.T.Helper()

@@ -232,6 +232,11 @@ func (l *gcpLogger) WithAttributes() attributer {
 	return &gcpAttributer{logger: l, attributes: attrs}
 }
 
+// TraceID returns the trace ID of the request logs
+func (l *gcpLogger) TraceID() string {
+	return l.traceID
+}
+
 func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, msg any) {
 	l.root.mu.Lock()
 	if l.root.maxSeverity < severity {
