@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.6](https://github.com/cccteam/logger/compare/v0.1.5...v0.1.6) (2024-02-20)
+
+
+### Features
+
+* Expose TraceID of the logger ([#34](https://github.com/cccteam/logger/issues/34)) ([ea6ad1e](https://github.com/cccteam/logger/commit/ea6ad1e18c17ba207e6d4b446c0c8b6337f62ad3))
+
+
+### Bug Fixes
+
+* Change Severity Classification for 400 Status Codes from Error to Info ([#34](https://github.com/cccteam/logger/issues/34)) ([ea6ad1e](https://github.com/cccteam/logger/commit/ea6ad1e18c17ba207e6d4b446c0c8b6337f62ad3))
+
 ## [0.1.5](https://github.com/cccteam/logger/compare/v0.1.4...v0.1.5) (2024-01-19)
 
 
