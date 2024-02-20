@@ -254,7 +254,7 @@ func TestNewConsoleLogger(t *testing.T) {
 			want: &consoleLogger{
 				r:             &http.Request{},
 				noColor:       true,
-				maxSeverity:   logging.Debug,
+				maxSeverity:   logging.Info,
 				rsvdReqKeys:   []string{"requestSize", "responseSize", "logCount"},
 				reqAttributes: map[string]any{},
 				attributes:    map[string]any{},
