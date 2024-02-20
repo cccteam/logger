@@ -566,6 +566,10 @@ func Test_gcpLogger(t *testing.T) {
 			l.Errorf(ctx, tt.args.format, tt.args.v...)
 			verifyOutput(buf.String(), "Errorf", tt.wantErrorf, logging.Error)
 			buf.Reset()
+
+			if l.TraceID() != tt.fields.traceID {
+				t.Errorf("TraceID() = %v, want %v", l.TraceID(), tt.fields.traceID)
+			}
 		})
 	}
 }

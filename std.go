@@ -69,6 +69,11 @@ func (l *stdErrLogger) WithAttributes() attributer {
 	return &stdAttributer{logger: l, attributes: attrs}
 }
 
+// TraceID returns an empty string for the std logger
+func (l *stdErrLogger) TraceID() string {
+	return ""
+}
+
 func (l *stdErrLogger) std(level, msg string) {
 	for k, v := range l.attributes {
 		msg += fmt.Sprintf(", %s=%v", k, v)

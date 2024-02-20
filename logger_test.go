@@ -335,3 +335,7 @@ func (l *testCtxLogger) AddRequestAttribute(_ string, _ any) {}
 func (l *testCtxLogger) WithAttributes() attributer {
 	return &Mockattributer{}
 }
+
+func (l *testCtxLogger) TraceID() string {
+	return "testTraceID"
+}

@@ -75,7 +75,7 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l.mu.Unlock()
 
 	// status code should also set the minimum maxSeverity to Error
-	if sw.Status() > 399 && maxSeverity < logging.Error {
+	if sw.Status() > 499 && maxSeverity < logging.Error {
 		maxSeverity = logging.Error
 	}
 
@@ -105,7 +105,7 @@ func newConsoleLogger(r *http.Request, noColor bool) *consoleLogger {
 	l := &consoleLogger{
 		r: r, noColor: noColor,
 		rsvdReqKeys:   []string{cslReqSize, cslRespSize, cslLogCount},
-		maxSeverity:   logging.Debug,
+		maxSeverity:   logging.Info,
 		reqAttributes: make(map[string]any),
 		attributes:    make(map[string]any),
 	}
@@ -188,6 +188,11 @@ func (l *consoleLogger) WithAttributes() attributer {
 	}
 
 	return &consoleAttributer{logger: l, attributes: attrs}
+}
+
+// TraceID returns an empty string for the console logger
+func (l *consoleLogger) TraceID() string {
+	return ""
 }
 
 func (l *consoleLogger) console(level logging.Severity, c color, msg string) {

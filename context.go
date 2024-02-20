@@ -65,6 +65,9 @@ type ctxLogger interface {
 
 	// WithAttributes returns an attributer that can be used to add child (trace) log attributes
 	WithAttributes() attributer
+
+	// TraceID returns the trace ID of the request logs
+	TraceID() string
 }
 
 // attributer defines the interface for adding attributes for child (trace) logs

@@ -85,7 +85,7 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// status code should also set the minimum maxSeverity to Error
-	if sw.Status() > 399 && maxSeverity < logging.Error {
+	if sw.Status() > 499 && maxSeverity < logging.Error {
 		maxSeverity = logging.Error
 	}
 
@@ -230,6 +230,11 @@ func (l *gcpLogger) WithAttributes() attributer {
 	}
 
 	return &gcpAttributer{logger: l, attributes: attrs}
+}
+
+// TraceID returns the trace ID of the request logs
+func (l *gcpLogger) TraceID() string {
+	return l.traceID
 }
 
 func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, msg any) {

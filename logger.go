@@ -50,6 +50,11 @@ func Req(r *http.Request) *Logger {
 	}
 }
 
+// TraceID returns the trace ID of the request logs
+func (l *Logger) TraceID() string {
+	return l.lg.TraceID()
+}
+
 // Debug logs a debug message.
 func (l *Logger) Debug(v any) {
 	l.lg.Debug(l.ctx, v)
