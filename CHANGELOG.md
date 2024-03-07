@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/cccteam/logger/compare/v0.1.6...v0.1.7) (2024-03-06)
+
+
+### Dependencies
+
+* upgrade to Go version 1.21.8 ([8e13d7b](https://github.com/cccteam/logger/commit/8e13d7b8dcc8a3a74f34dac3e55fb07de467bb5a))
+
 ## [0.1.6](https://github.com/cccteam/logger/compare/v0.1.5...v0.1.6) (2024-02-20)
 
 
