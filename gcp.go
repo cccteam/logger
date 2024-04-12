@@ -67,7 +67,7 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	traceID := gcpTraceIDFromRequest(r, g.projectID, generateID)
 	l := newGCPLogger(g.childLogger, traceID)
 	r = r.WithContext(newContext(r.Context(), l))
-	sw := &statusWriter{ResponseWriter: w}
+	sw := newResponseRecorder(w)
 
 	g.next.ServeHTTP(sw, r)
 
@@ -105,7 +105,7 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			RequestSize:  requestSize(r.Header.Get("Content-Length")),
 			Latency:      time.Since(begin),
 			Status:       sw.Status(),
-			ResponseSize: sw.length,
+			ResponseSize: sw.Length(),
 			RemoteIP:     r.Header.Get("X-Forwarded-For"),
 		},
 	})

@@ -32,37 +32,69 @@ func requestSize(length string) int64 {
 	return int64(l)
 }
 
-type statusWriter struct {
+func newResponseRecorder(w http.ResponseWriter) responseRecorder {
+	if _, ok := w.(http.Flusher); ok {
+		return &recorderFlusher{
+			recorder: recorder{
+				ResponseWriter: w,
+			},
+		}
+	}
+
+	return &recorder{
+		ResponseWriter: w,
+	}
+}
+
+type responseRecorder interface {
+	http.ResponseWriter
+	Status() int
+	WriteHeader(status int)
+	Write(b []byte) (int, error)
+	Length() int64
+}
+
+type recorder struct {
 	http.ResponseWriter
 	status int
 	length int64
 }
 
-func (w *statusWriter) Status() int {
-	if w.status == 0 {
+func (r *recorder) Status() int {
+	if r.status == 0 {
 		return http.StatusOK
 	}
 
-	return w.status
+	return r.status
 }
 
-func (w *statusWriter) WriteHeader(status int) {
-	w.status = status
-	w.ResponseWriter.WriteHeader(status)
+func (r *recorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
 }
 
-func (w *statusWriter) Write(b []byte) (int, error) {
-	if w.status == 0 {
-		w.status = 200
-	}
-
-	n, err := w.ResponseWriter.Write(b)
-	w.length += int64(n)
+func (r *recorder) Write(b []byte) (int, error) {
+	n, err := r.ResponseWriter.Write(b)
+	r.length += int64(n)
 	if err != nil {
 		return n, errors.Wrap(err, "http.ResponseWriter.Write()")
 	}
 
 	return n, nil
+}
+
+func (r *recorder) Length() int64 {
+	return r.length
+}
+
+type recorderFlusher struct {
+	recorder
+}
+
+func (r *recorderFlusher) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // generateID provides an id that matches the trace id format

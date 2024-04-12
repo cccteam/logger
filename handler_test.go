@@ -87,7 +87,7 @@ func Test_requestSize(t *testing.T) {
 	}
 }
 
-func Test_statusWriter_Status(t *testing.T) {
+func Test_recorder_Status(t *testing.T) {
 	t.Parallel()
 
 	type fields struct {
@@ -114,17 +114,17 @@ func Test_statusWriter_Status(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			w := &statusWriter{
+			w := &recorder{
 				status: tt.fields.status,
 			}
 			if got := w.Status(); got != tt.want {
-				t.Errorf("statusWriter.Status() = %v, want %v", got, tt.want)
+				t.Errorf("recorder.Status() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func Test_statusWriter_WriteHeader(t *testing.T) {
+func Test_recorder_WriteHeader(t *testing.T) {
 	t.Parallel()
 
 	type fields struct {
@@ -154,18 +154,18 @@ func Test_statusWriter_WriteHeader(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			w := &statusWriter{
+			w := &recorder{
 				ResponseWriter: tt.fields.ResponseWriter,
 			}
 			w.WriteHeader(tt.args.status)
 			if got := w.Status(); got != tt.want {
-				t.Errorf("statusWriter.Status() = %v, want %v", got, tt.want)
+				t.Errorf("recorder.Status() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func Test_statusWriter_Write(t *testing.T) {
+func Test_recorder_Write(t *testing.T) {
 	t.Parallel()
 
 	type fields struct {
@@ -209,7 +209,7 @@ func Test_statusWriter_Write(t *testing.T) {
 		{
 			name: "Write error",
 			fields: fields{
-				ResponseWriter: &responseRecorder{err: errors.New("Bang")},
+				ResponseWriter: &testResponseRecorder{err: errors.New("Bang")},
 				status:         201,
 			},
 			args: args{
@@ -224,19 +224,19 @@ func Test_statusWriter_Write(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			w := &statusWriter{
+			w := &recorder{
 				ResponseWriter: tt.fields.ResponseWriter,
 				status:         tt.fields.status,
 			}
 			got, err := w.Write(tt.args.b)
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("statusWriter.Write() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("recorder.Write() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if got != tt.wantLength {
-				t.Errorf("statusWriter.Write() = %v, wantLength %v", got, tt.wantLength)
+				t.Errorf("recorder.Write() = %v, wantLength %v", got, tt.wantLength)
 			}
 			if got := w.Status(); got != tt.wantStatus {
-				t.Errorf("statusWriter.Status() = %v, wantStatus %v", got, tt.wantStatus)
+				t.Errorf("recorder.Status() = %v, wantStatus %v", got, tt.wantStatus)
 			}
 		})
 	}
@@ -265,11 +265,11 @@ func Test_generateID(t *testing.T) {
 	}
 }
 
-type responseRecorder struct {
+type testResponseRecorder struct {
 	http.ResponseWriter
 	err error
 }
 
-func (rw *responseRecorder) Write(buf []byte) (int, error) {
+func (rw *testResponseRecorder) Write(buf []byte) (int, error) {
 	return len(buf), rw.err
 }
