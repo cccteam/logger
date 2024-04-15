@@ -124,6 +124,63 @@ func Test_recorder_Status(t *testing.T) {
 	}
 }
 
+func Test_recorder_Length(t *testing.T) {
+	t.Parallel()
+
+	type fields struct {
+		ResponseWriter http.ResponseWriter
+	}
+	type args struct {
+		b []byte
+	}
+	tests := []struct {
+		name       string
+		fields     fields
+		args       args
+		wantLength int64
+	}{
+		{
+			name: "Write 10 bytes",
+			fields: fields{
+				ResponseWriter: &httptest.ResponseRecorder{},
+			},
+			args: args{
+				b: []byte("0123456789"),
+			},
+			wantLength: 10,
+		},
+		{
+			name: "Write 0 bytes",
+			fields: fields{
+				ResponseWriter: &httptest.ResponseRecorder{},
+			},
+			args: args{
+				b: []byte(""),
+			},
+			wantLength: 0,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			w := &recorder{
+				ResponseWriter: tt.fields.ResponseWriter,
+			}
+			got, err := w.Write(tt.args.b)
+			if err != nil {
+				t.Fatalf("recorder.Write() error = %v, wantErr %v", err, false)
+			}
+			if int64(got) != tt.wantLength {
+				t.Errorf("recorder.Write() = %v, wantLength %v", got, tt.wantLength)
+			}
+			if got := w.Length(); got != tt.wantLength {
+				t.Errorf("recorder.Status() = %v, wantLength %v", got, tt.wantLength)
+			}
+		})
+	}
+}
+
 func Test_recorder_WriteHeader(t *testing.T) {
 	t.Parallel()
 
