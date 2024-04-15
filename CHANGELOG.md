@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.8](https://github.com/cccteam/logger/compare/v0.1.7...v0.1.8) (2024-04-15)
+
+
+### Features
+
+* Add support for Flusher interface ([#48](https://github.com/cccteam/logger/issues/48)) ([4739e55](https://github.com/cccteam/logger/commit/4739e555078f538fc50b71b8de90093bbaaddaee))
+
+
+### Dependencies
+
+* upgrade Go to version 1.22.2 with deps ([#45](https://github.com/cccteam/logger/issues/45)) ([2cc5beb](https://github.com/cccteam/logger/commit/2cc5beb85c131c547b4b8670bf77d62d1f2f0d7c))
+
 ## [0.1.7](https://github.com/cccteam/logger/compare/v0.1.6...v0.1.7) (2024-03-06)
 
 
