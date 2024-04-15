@@ -65,7 +65,7 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	xrayTraceID := awsTraceIDFromRequest(r, generateID)
 	l := newAWSLogger(h.logger, xrayTraceID)
 	r = r.WithContext(newContext(r.Context(), l))
-	sw := &statusWriter{ResponseWriter: w}
+	sw := newResponseRecorder(w)
 
 	h.next.ServeHTTP(sw, r)
 
@@ -261,12 +261,12 @@ func (a *awsAttributer) Logger() ctxLogger {
 }
 
 // httpAttributes returns a slice of slog.Attr for the http request and response
-func httpAttributes(r *http.Request, sw *statusWriter) []slog.Attr {
+func httpAttributes(r *http.Request, sw responseRecorder) []slog.Attr {
 	return []slog.Attr{
 		slog.String(awsHTTPMethodKey, r.Method),
 		slog.String(awsHTTPURLKey, r.URL.String()),
 		slog.Int(awsHTTPStatusCodeKey, sw.Status()),
-		slog.Int64(awsHTTPRespLengthKey, sw.length),
+		slog.Int64(awsHTTPRespLengthKey, sw.Length()),
 		slog.String(awsHTTPUserAgentKey, r.UserAgent()),
 		slog.String(awsHTTPRemoteIPKey, r.RemoteAddr),
 		slog.String(awsHTTPSchemeKey, r.URL.Scheme),

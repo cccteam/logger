@@ -87,7 +87,7 @@ func Test_requestSize(t *testing.T) {
 	}
 }
 
-func Test_statusWriter_Status(t *testing.T) {
+func Test_recorder_Status(t *testing.T) {
 	t.Parallel()
 
 	type fields struct {
@@ -114,17 +114,74 @@ func Test_statusWriter_Status(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			w := &statusWriter{
+			w := &recorder{
 				status: tt.fields.status,
 			}
 			if got := w.Status(); got != tt.want {
-				t.Errorf("statusWriter.Status() = %v, want %v", got, tt.want)
+				t.Errorf("recorder.Status() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func Test_statusWriter_WriteHeader(t *testing.T) {
+func Test_recorder_Length(t *testing.T) {
+	t.Parallel()
+
+	type fields struct {
+		ResponseWriter http.ResponseWriter
+	}
+	type args struct {
+		b []byte
+	}
+	tests := []struct {
+		name       string
+		fields     fields
+		args       args
+		wantLength int64
+	}{
+		{
+			name: "Write 10 bytes",
+			fields: fields{
+				ResponseWriter: &httptest.ResponseRecorder{},
+			},
+			args: args{
+				b: []byte("0123456789"),
+			},
+			wantLength: 10,
+		},
+		{
+			name: "Write 0 bytes",
+			fields: fields{
+				ResponseWriter: &httptest.ResponseRecorder{},
+			},
+			args: args{
+				b: []byte(""),
+			},
+			wantLength: 0,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			w := &recorder{
+				ResponseWriter: tt.fields.ResponseWriter,
+			}
+			got, err := w.Write(tt.args.b)
+			if err != nil {
+				t.Fatalf("recorder.Write() error = %v, wantErr %v", err, false)
+			}
+			if int64(got) != tt.wantLength {
+				t.Errorf("recorder.Write() = %v, wantLength %v", got, tt.wantLength)
+			}
+			if got := w.Length(); got != tt.wantLength {
+				t.Errorf("recorder.Status() = %v, wantLength %v", got, tt.wantLength)
+			}
+		})
+	}
+}
+
+func Test_recorder_WriteHeader(t *testing.T) {
 	t.Parallel()
 
 	type fields struct {
@@ -154,18 +211,18 @@ func Test_statusWriter_WriteHeader(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			w := &statusWriter{
+			w := &recorder{
 				ResponseWriter: tt.fields.ResponseWriter,
 			}
 			w.WriteHeader(tt.args.status)
 			if got := w.Status(); got != tt.want {
-				t.Errorf("statusWriter.Status() = %v, want %v", got, tt.want)
+				t.Errorf("recorder.Status() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func Test_statusWriter_Write(t *testing.T) {
+func Test_recorder_Write(t *testing.T) {
 	t.Parallel()
 
 	type fields struct {
@@ -209,7 +266,7 @@ func Test_statusWriter_Write(t *testing.T) {
 		{
 			name: "Write error",
 			fields: fields{
-				ResponseWriter: &responseRecorder{err: errors.New("Bang")},
+				ResponseWriter: &testResponseRecorder{err: errors.New("Bang")},
 				status:         201,
 			},
 			args: args{
@@ -224,19 +281,19 @@ func Test_statusWriter_Write(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			w := &statusWriter{
+			w := &recorder{
 				ResponseWriter: tt.fields.ResponseWriter,
 				status:         tt.fields.status,
 			}
 			got, err := w.Write(tt.args.b)
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("statusWriter.Write() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("recorder.Write() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if got != tt.wantLength {
-				t.Errorf("statusWriter.Write() = %v, wantLength %v", got, tt.wantLength)
+				t.Errorf("recorder.Write() = %v, wantLength %v", got, tt.wantLength)
 			}
 			if got := w.Status(); got != tt.wantStatus {
-				t.Errorf("statusWriter.Status() = %v, wantStatus %v", got, tt.wantStatus)
+				t.Errorf("recorder.Status() = %v, wantStatus %v", got, tt.wantStatus)
 			}
 		})
 	}
@@ -265,11 +322,92 @@ func Test_generateID(t *testing.T) {
 	}
 }
 
-type responseRecorder struct {
+type testResponseRecorder struct {
 	http.ResponseWriter
 	err error
 }
 
-func (rw *responseRecorder) Write(buf []byte) (int, error) {
+func (rw *testResponseRecorder) Write(buf []byte) (int, error) {
 	return len(buf), rw.err
+}
+
+func Test_recorderFlusher_Flush(t *testing.T) {
+	t.Parallel()
+
+	type fields struct {
+		recorder http.ResponseWriter
+	}
+	tests := []struct {
+		name        string
+		fields      fields
+		wantFlusher bool
+		flushCount  int
+	}{
+		{
+			name: "Flusher",
+			fields: fields{
+				recorder: newResponseRecorder(&testResponseWriterFlusher{}),
+			},
+			wantFlusher: true,
+			flushCount:  1,
+		},
+		{
+			name: "No flusher",
+			fields: fields{
+				recorder: newResponseRecorder(&testResponseWriter{}),
+			},
+			wantFlusher: false,
+			flushCount:  0,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := tt.fields.recorder
+			f, gotFlusher := r.(http.Flusher)
+			if gotFlusher {
+				f.Flush()
+			}
+			if gotFlusher != tt.wantFlusher {
+				t.Fatalf("recorder foundFlusher = %v, want %v", gotFlusher, tt.wantFlusher)
+			}
+
+			if tt.wantFlusher {
+				rf, ok := r.(*recorderFlusher)
+				if !ok {
+					t.Fatalf("recorder not a recorderFlusher")
+				}
+				c, ok := rf.ResponseWriter.(*testResponseWriterFlusher)
+				if !ok {
+					t.Fatalf("ResponseWriter not a testResponseWriterFlusher")
+				}
+				if c.flushed != tt.flushCount {
+					t.Errorf("recorderFlusher.Flush() = %v, want %v", c.flushed, tt.flushCount)
+				}
+			}
+		})
+	}
+}
+
+type testResponseWriter struct{}
+
+func (*testResponseWriter) Header() http.Header {
+	return http.Header{}
+}
+
+func (*testResponseWriter) Write([]byte) (int, error) {
+	return 0, nil
+}
+
+func (*testResponseWriter) WriteHeader(int) {
+}
+
+type testResponseWriterFlusher struct {
+	testResponseWriter
+	flushed int
+}
+
+func (t *testResponseWriterFlusher) Flush() {
+	t.flushed++
 }

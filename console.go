@@ -64,7 +64,7 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	begin := time.Now()
 	l := newConsoleLogger(r, c.noColor)
 	r = r.WithContext(newContext(r.Context(), l))
-	sw := &statusWriter{ResponseWriter: w}
+	sw := newResponseRecorder(w)
 
 	c.next.ServeHTTP(sw, r)
 
@@ -80,7 +80,7 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	msg := fmt.Sprintf("%s %s %d %s %s=%d %s=%d %s=%d", r.Method, r.URL.Path, sw.Status(), time.Since(begin),
-		cslReqSize, requestSize(r.Header.Get("Content-Length")), cslRespSize, sw.length, cslLogCount, logCount,
+		cslReqSize, requestSize(r.Header.Get("Content-Length")), cslRespSize, sw.Length(), cslLogCount, logCount,
 	)
 	for k, v := range attributes {
 		msg += fmt.Sprintf(" %s=%v", k, v)
