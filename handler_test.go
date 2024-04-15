@@ -374,9 +374,13 @@ func Test_recorderFlusher_Flush(t *testing.T) {
 			}
 
 			if tt.wantFlusher {
-				c, ok := r.(*testResponseWriterFlusher)
+				rf, ok := r.(*recorderFlusher)
 				if !ok {
-					t.Fatalf("recorder not a testResponseWriterFlusher")
+					t.Fatalf("recorder not a recorderFlusher")
+				}
+				c, ok := rf.recorder.ResponseWriter.(*testResponseWriterFlusher)
+				if !ok {
+					t.Fatalf("ResponseWriter not a testResponseWriterFlusher")
 				}
 				if c.flushed != tt.flushCount {
 					t.Errorf("recorderFlusher.Flush() = %v, want %v", c.flushed, tt.flushCount)
