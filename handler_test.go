@@ -330,3 +330,80 @@ type testResponseRecorder struct {
 func (rw *testResponseRecorder) Write(buf []byte) (int, error) {
 	return len(buf), rw.err
 }
+
+func Test_recorderFlusher_Flush(t *testing.T) {
+	t.Parallel()
+
+	type fields struct {
+		recorder http.ResponseWriter
+	}
+	tests := []struct {
+		name        string
+		fields      fields
+		wantFlusher bool
+		flushCount  int
+	}{
+		{
+			name: "Flusher",
+			fields: fields{
+				recorder: newResponseRecorder(&testResponseWriterFlusher{}),
+			},
+			wantFlusher: true,
+			flushCount:  1,
+		},
+		{
+			name: "No flusher",
+			fields: fields{
+				recorder: newResponseRecorder(&testResponseWriter{}),
+			},
+			wantFlusher: false,
+			flushCount:  0,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := tt.fields.recorder
+			f, gotFlusher := r.(http.Flusher)
+			if gotFlusher {
+				f.Flush()
+			}
+			if gotFlusher != tt.wantFlusher {
+				t.Fatalf("recorder foundFlusher = %v, want %v", gotFlusher, tt.wantFlusher)
+			}
+
+			if tt.wantFlusher {
+				c, ok := r.(*testResponseWriterFlusher)
+				if !ok {
+					t.Fatalf("recorder not a testResponseWriterFlusher")
+				}
+				if c.flushed != tt.flushCount {
+					t.Errorf("recorderFlusher.Flush() = %v, want %v", c.flushed, tt.flushCount)
+				}
+			}
+		})
+	}
+}
+
+type testResponseWriter struct{}
+
+func (*testResponseWriter) Header() http.Header {
+	return http.Header{}
+}
+
+func (*testResponseWriter) Write([]byte) (int, error) {
+	return 0, nil
+}
+
+func (*testResponseWriter) WriteHeader(int) {
+}
+
+type testResponseWriterFlusher struct {
+	testResponseWriter
+	flushed int
+}
+
+func (t *testResponseWriterFlusher) Flush() {
+	t.flushed++
+}
