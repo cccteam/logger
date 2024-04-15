@@ -378,7 +378,7 @@ func Test_recorderFlusher_Flush(t *testing.T) {
 				if !ok {
 					t.Fatalf("recorder not a recorderFlusher")
 				}
-				c, ok := rf.recorder.ResponseWriter.(*testResponseWriterFlusher)
+				c, ok := rf.ResponseWriter.(*testResponseWriterFlusher)
 				if !ok {
 					t.Fatalf("ResponseWriter not a testResponseWriterFlusher")
 				}
