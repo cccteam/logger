@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.9](https://github.com/cccteam/logger/compare/v0.1.8...v0.1.9) (2024-05-10)
+
+
+### Features
+
+* Add semantic pull request titles workflow ([#53](https://github.com/cccteam/logger/issues/53)) ([8ed4503](https://github.com/cccteam/logger/commit/8ed45030d7788556fb7d337b6b3b7468c41fdbf3))
+
+
+### Bug Fixes
+
+* Add missing Release Please changelog section type ([#55](https://github.com/cccteam/logger/issues/55)) ([df92379](https://github.com/cccteam/logger/commit/df92379050960e4fd3ccfffc64ba7b91b1420a0e))
+
+
+### Code Upgrade
+
+* Go version 1.22.3 and dependencies ([#52](https://github.com/cccteam/logger/issues/52)) ([5df6d1a](https://github.com/cccteam/logger/commit/5df6d1aadd44e783208c504c1bfda447f0c703fc))
+* Upgrade golang-ci workflow to 3.0.0 ([#53](https://github.com/cccteam/logger/issues/53)) ([8ed4503](https://github.com/cccteam/logger/commit/8ed45030d7788556fb7d337b6b3b7468c41fdbf3))
+
 ## [0.1.8](https://github.com/cccteam/logger/compare/v0.1.7...v0.1.8) (2024-04-15)
 
 
