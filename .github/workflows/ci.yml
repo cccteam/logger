@@ -13,3 +13,5 @@ jobs:
     with:
       go-version: '1.22.3'
       build-tags: '["", "dev", "consolelog"]'
+  semantic-titles:
+    uses: cccteam/github-workflows/.github/workflows/semantic-pull-request-title.yml@v3.0.0
