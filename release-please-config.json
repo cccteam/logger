@@ -12,6 +12,7 @@
     { "type": "revert", "section": "Reverts" },
     { "type": "docs", "section": "Documentation" },
     { "type": "deps", "section": "Dependencies" },
+    { "type": "upgrade", "section": "Code Upgrade" },
     { "type": "style", "section": "Styles", "hidden": true },
     { "type": "chore", "section": "Miscellaneous Chores", "hidden": true },
     { "type": "refactor", "section": "Code Refactoring" },
