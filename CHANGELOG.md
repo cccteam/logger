@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.10](https://github.com/cccteam/logger/compare/v0.1.9...v0.1.10) (2024-06-05)
+
+
+### Code Upgrade
+
+* Go version 1.22.4 for vulnerability GO-2024-2887 ([#60](https://github.com/cccteam/logger/issues/60)) ([fb44d5b](https://github.com/cccteam/logger/commit/fb44d5b96845e6b2698aeae886ec1481c7e9a49c))
+
 ## [0.1.9](https://github.com/cccteam/logger/compare/v0.1.8...v0.1.9) (2024-05-10)
 
 
