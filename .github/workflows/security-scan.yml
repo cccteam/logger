@@ -3,9 +3,6 @@ name: Security Scan
 on:
   schedule:
     - cron: '0 14 * * *' # Daily at 8:00 AM CDT
-  push:
-    branches:
-      - feature/upgrade-workflows
 
 jobs:
   security_scan:
