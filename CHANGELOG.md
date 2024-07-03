@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11](https://github.com/cccteam/logger/compare/v0.1.10...v0.1.11) (2024-07-03)
+
+
+### Code Upgrade
+
+* Update Go version to 1.22.5 to address GO-2024-2963 ([#68](https://github.com/cccteam/logger/issues/68)) ([8ca1e4f](https://github.com/cccteam/logger/commit/8ca1e4ff5ea69999d580c4a94d3a4ccedf6a3b95))
+
 ## [0.1.10](https://github.com/cccteam/logger/compare/v0.1.9...v0.1.10) (2024-06-05)
 
 
