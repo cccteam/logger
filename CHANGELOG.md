@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.12](https://github.com/cccteam/logger/compare/v0.1.11...v0.1.12) (2024-07-11)
+
+
+### Bug Fixes
+
+* Fix gRPC metadata security issue ([#73](https://github.com/cccteam/logger/issues/73)) ([03fdeae](https://github.com/cccteam/logger/commit/03fdeaea3c40c1973bb84b74abe38fd5eef23e0c))
+
 ## [0.1.11](https://github.com/cccteam/logger/compare/v0.1.10...v0.1.11) (2024-07-03)
 
 
