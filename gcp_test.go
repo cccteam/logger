@@ -259,16 +259,16 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 						for i := 0; i < tt.args.logs; i++ {
 							switch tt.args.level {
 							case logging.Info:
-								Req(r).Info("some log")
+								FromReq(r).Info("some log")
 							case logging.Warning:
-								Req(r).Warn("some log")
+								FromReq(r).Warn("some log")
 							case logging.Error:
-								Req(r).Error("some log")
+								FromReq(r).Error("some log")
 							default:
 							}
 						}
 
-						gcpLgr, ok := Req(r).lg.(*gcpLogger)
+						gcpLgr, ok := FromReq(r).lg.(*gcpLogger)
 						if !ok {
 							t.Fatalf("Req() = %v, wanted: %T", gcpLgr, &gcpLogger{})
 						}

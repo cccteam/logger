@@ -191,7 +191,7 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 				logAll: tt.fields.logAll,
 				next: http.HandlerFunc(
 					func(w http.ResponseWriter, r *http.Request) {
-						awsLgr, ok := Req(r).lg.(*awsLogger)
+						awsLgr, ok := FromReq(r).lg.(*awsLogger)
 						if !ok {
 							t.Fatal("Failed to get awsLogger from request")
 						}
@@ -201,11 +201,11 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 						for i := 0; i < tt.args.logs; i++ {
 							switch tt.args.level {
 							case slog.LevelInfo:
-								Req(r).Info("some log")
+								FromReq(r).Info("some log")
 							case slog.LevelWarn:
-								Req(r).Warn("some log")
+								FromReq(r).Warn("some log")
 							case slog.LevelError:
-								Req(r).Error("some log")
+								FromReq(r).Error("some log")
 							default:
 							}
 						}

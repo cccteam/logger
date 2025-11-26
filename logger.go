@@ -29,7 +29,15 @@ type Logger struct {
 
 // Ctx returns the logger from the context. If
 // no logger is found, it will write to stderr
+// 
+// Deprecated: Use FromCtx instead
 func Ctx(ctx context.Context) *Logger {
+	return FromCtx(ctx)
+}
+
+// FromCtx returns the logger from the context. If
+// no logger is found, it will write to stderr
+func FromCtx(ctx context.Context) *Logger {
 	return &Logger{
 		ctx: ctx,
 		lg:  fromCtx(ctx),
@@ -43,7 +51,15 @@ func NewCtx(ctx context.Context, l *Logger) context.Context {
 
 // Req returns the logger from the http request. If
 // no logger is found, it will write to stderr
+//
+// Deprecated: Use FromReq instead
 func Req(r *http.Request) *Logger {
+	return FromReq(r)
+}
+
+// FromReq returns the logger from the http request. If
+// no logger is found, it will write to stderr
+func FromReq(r *http.Request) *Logger {
 	return &Logger{
 		ctx: r.Context(),
 		lg:  fromReq(r),
