@@ -90,7 +90,7 @@ func TestAWSExporter_Middleware(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+			next := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
 			e := &AWSExporter{
 				logAll: tt.fields.logAll,
 			}
@@ -681,9 +681,9 @@ func Test_awsAttributer_Logger(t *testing.T) {
 		attributes map[string]any
 	}
 	tests := []struct {
-		name string
-		fields
-		want *awsLogger
+		name   string
+		fields fields
+		want   *awsLogger
 	}{
 		{
 			name: "success getting logger",

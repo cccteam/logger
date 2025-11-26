@@ -219,9 +219,9 @@ func Test_stdAttributer_Logger(t *testing.T) {
 		attributes map[string]any
 	}
 	tests := []struct {
-		name string
-		fields
-		want *stdErrLogger
+		name   string
+		fields fields
+		want   *stdErrLogger
 	}{
 		{
 			name: "success getting logger",

@@ -1,4 +1,4 @@
-// package logger is an HTTP request logger that implements correlated logging to one of several supported platforms.
+// Package logger is an HTTP request logger that implements correlated logging to one of several supported platforms.
 // Each HTTP request is logged as the parent log, with all logs generated during the request as child logs.
 //
 // The Logging destination is configured with an Exporter. This package provides Exporters for Google Cloud Logging, AWS CloudWatch,
@@ -29,7 +29,7 @@ type Logger struct {
 
 // Ctx returns the logger from the context. If
 // no logger is found, it will write to stderr
-// 
+//
 // Deprecated: Use FromCtx instead
 func Ctx(ctx context.Context) *Logger {
 	return FromCtx(ctx)
@@ -128,6 +128,7 @@ func (l *Logger) WithAttributes() *AttributerLogger {
 	}
 }
 
+// AttributerLogger holds the atrributes and logger used for creating a child logger
 type AttributerLogger struct {
 	logger     *Logger
 	attributer attributer

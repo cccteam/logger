@@ -561,9 +561,9 @@ func Test_consoleAttributer_Logger(t *testing.T) {
 		attributes map[string]any
 	}
 	tests := []struct {
-		name string
-		fields
-		want *consoleLogger
+		name   string
+		fields fields
+		want   *consoleLogger
 	}{
 		{
 			name: "success",

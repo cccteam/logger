@@ -777,9 +777,9 @@ func Test_gcpAttributer_Logger(t *testing.T) {
 		attributes map[string]any
 	}
 	tests := []struct {
-		name string
-		fields
-		want *gcpLogger
+		name   string
+		fields fields
+		want   *gcpLogger
 	}{
 		{
 			name: "success getting logger",
@@ -844,7 +844,7 @@ func disableMetaServertest(t *testing.T) {
 	// so your test is very slow. This tries to causes the
 	// detection to fail faster and not hang your test so long
 	curEnv := os.Getenv("GCE_METADATA_HOST")
-	t.Cleanup(func() { os.Setenv("GCE_METADATA_HOST", curEnv) })
+	t.Cleanup(func() { _ = os.Setenv("GCE_METADATA_HOST", curEnv) })
 	_ = os.Setenv("GCE_METADATA_HOST", "localhost")
 }
 
