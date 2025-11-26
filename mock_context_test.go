@@ -20,6 +20,7 @@ import (
 type MockctxLogger struct {
 	ctrl     *gomock.Controller
 	recorder *MockctxLoggerMockRecorder
+	isgomock struct{}
 }
 
 // MockctxLoggerMockRecorder is the mock recorder for MockctxLogger.
@@ -199,6 +200,7 @@ func (mr *MockctxLoggerMockRecorder) WithAttributes() *gomock.Call {
 type Mockattributer struct {
 	ctrl     *gomock.Controller
 	recorder *MockattributerMockRecorder
+	isgomock struct{}
 }
 
 // MockattributerMockRecorder is the mock recorder for Mockattributer.
