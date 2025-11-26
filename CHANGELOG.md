@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.13](https://github.com/cccteam/logger/compare/v0.1.12...v0.1.13) (2025-11-26)
+
+
+### Code Refactoring
+
+* Rename Ctx() -&gt; FromCtx() and Req() -&gt; FromReq() ([#80](https://github.com/cccteam/logger/issues/80)) ([352dc92](https://github.com/cccteam/logger/commit/352dc92baa29387b7567315e48259d12b934c970))
+
 ## [0.1.12](https://github.com/cccteam/logger/compare/v0.1.11...v0.1.12) (2024-07-11)
 
 
