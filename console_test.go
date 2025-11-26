@@ -193,16 +193,16 @@ func Test_consoleHandler_ServeHTTP(t *testing.T) {
 					func(w http.ResponseWriter, r *http.Request) {
 						switch tt.args.level {
 						case slog.LevelInfo:
-							Req(r).Info("some log")
+							FromReq(r).Info("some log")
 						case slog.LevelWarn:
-							Req(r).Warn("some log")
+							FromReq(r).Warn("some log")
 						case slog.LevelError:
-							Req(r).Error("some log")
+							FromReq(r).Error("some log")
 						default:
 						}
 
 						var ok bool
-						l, ok = Req(r).lg.(*consoleLogger)
+						l, ok = FromReq(r).lg.(*consoleLogger)
 						if !ok {
 							t.Fatal("Failed to get consoleLogger from request")
 						}
@@ -561,9 +561,9 @@ func Test_consoleAttributer_Logger(t *testing.T) {
 		attributes map[string]any
 	}
 	tests := []struct {
-		name string
-		fields
-		want *consoleLogger
+		name   string
+		fields fields
+		want   *consoleLogger
 	}{
 		{
 			name: "success",
