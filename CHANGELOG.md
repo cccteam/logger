@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.14](https://github.com/cccteam/logger/compare/v0.1.13...v0.1.14) (2025-12-09)
+
+
+### Code Upgrade
+
+* go =&gt; 1.25.5 & dependencies ([#86](https://github.com/cccteam/logger/issues/86)) ([07210a3](https://github.com/cccteam/logger/commit/07210a36af4e8577059f5c39c588f5bea762d142))
+
 ## [0.1.13](https://github.com/cccteam/logger/compare/v0.1.12...v0.1.13) (2025-11-26)
 
 
