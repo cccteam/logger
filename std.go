@@ -6,6 +6,8 @@ import (
 	"log"
 )
 
+var _ ctxLogger = (*stdErrLogger)(nil)
+
 type stdErrLogger struct {
 	attributes map[string]any
 }

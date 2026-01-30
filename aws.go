@@ -98,6 +98,8 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.logger.LogAttrs(r.Context(), maxLevel, parentLogEntry, logAttr...)
 }
 
+var _ ctxLogger = (*awsLogger)(nil)
+
 type awsLogger struct {
 	root          *awsLogger
 	logger        awslog

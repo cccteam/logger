@@ -79,14 +79,16 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		maxSeverity = logging.Error
 	}
 
-	msg := fmt.Sprintf("%s %s %d %s %s=%d %s=%d %s=%d", r.Method, r.URL.Path, sw.Status(), time.Since(begin),
-		cslReqSize, requestSize(r.Header.Get("Content-Length")), cslRespSize, sw.Length(), cslLogCount, logCount,
-	)
+	var msg strings.Builder
+	fmt.Fprintf(&msg, "%s %s %d %s %s=%d %s=%d %s=%d", r.Method, r.URL.Path, sw.Status(), time.Since(begin),
+		cslReqSize, requestSize(r.Header.Get("Content-Length")), cslRespSize, sw.Length(), cslLogCount, logCount)
 	for k, v := range attributes {
-		msg += fmt.Sprintf(" %s=%v", k, v)
+		fmt.Fprintf(&msg, " %s=%v", k, v)
 	}
-	l.console(maxSeverity, severityColor(maxSeverity), msg)
+	l.console(maxSeverity, severityColor(maxSeverity), msg.String())
 }
+
+var _ ctxLogger = (*consoleLogger)(nil)
 
 type consoleLogger struct {
 	root          *consoleLogger

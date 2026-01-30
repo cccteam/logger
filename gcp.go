@@ -132,6 +132,8 @@ type logger interface {
 	Log(e logging.Entry)
 }
 
+var _ ctxLogger = (*gcpLogger)(nil)
+
 type gcpLogger struct {
 	root          *gcpLogger
 	logger        logger
