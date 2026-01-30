@@ -88,6 +88,8 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l.console(maxSeverity, severityColor(maxSeverity), msg)
 }
 
+var _ ctxLogger = (*consoleLogger)(nil)
+
 type consoleLogger struct {
 	root          *consoleLogger
 	r             *http.Request
