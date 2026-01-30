@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.15](https://github.com/cccteam/logger/compare/v0.1.14...v0.1.15) (2026-01-30)
+
+
+### Code Upgrade
+
+* bump the github-actions group with 3 updates ([#84](https://github.com/cccteam/logger/issues/84)) ([f63fac8](https://github.com/cccteam/logger/commit/f63fac806c3f1a5da15bdb332bd4336b790e5a7a))
+* Upgrade Go and package dependencies ([#84](https://github.com/cccteam/logger/issues/84)) ([f63fac8](https://github.com/cccteam/logger/commit/f63fac806c3f1a5da15bdb332bd4336b790e5a7a))
+
 ## [0.1.14](https://github.com/cccteam/logger/compare/v0.1.13...v0.1.14) (2025-12-09)
 
 
