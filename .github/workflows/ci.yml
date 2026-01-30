@@ -9,9 +9,15 @@ concurrency:
 
 jobs:
   golang-ci:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
     uses: cccteam/github-workflows/.github/workflows/golang-ci.yml@v5.20.1
     with:
       golangci-lint-version: 'v2.4.0'
       build-tags: '["", "dev", "consolelog"]'
   semantic-titles:
+    permissions:
+      pull-requests: read
     uses: cccteam/github-workflows/.github/workflows/semantic-pull-request-title.yml@v5.20.1
