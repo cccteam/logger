@@ -6,6 +6,11 @@ on:
 
 jobs:
   security_scan:
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+      issues: write
     uses: cccteam/github-workflows/.github/workflows/golang-security-scan.yml@v5.20.1
     with:
       execute-trivy-scan: false
