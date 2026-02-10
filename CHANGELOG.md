@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.16](https://github.com/cccteam/logger/compare/v0.1.15...v0.1.16) (2026-02-10)
+
+
+### Code Upgrade
+
+* go 1.25.6 =&gt; go 1.25.7 ([#92](https://github.com/cccteam/logger/issues/92)) ([fc3fbb9](https://github.com/cccteam/logger/commit/fc3fbb90e09310f6561f68c8cf6402d447ad24f1))
+
 ## [0.1.15](https://github.com/cccteam/logger/compare/v0.1.14...v0.1.15) (2026-01-30)
 
 
