@@ -3,7 +3,8 @@
 // For HTTP request logging, each HTTP request is logged as the parent log, with all logs generated during the request as child logs.
 // Use [NewRequestLogger] to create middleware that automatically handles request correlation.
 //
-// For non-HTTP contexts such as background jobs, use the NewLogger method on each Exporter to create a Logger directly.
+// For non-HTTP contexts such as background jobs, use the NewLogger method on each Exporter to inject a Logger
+// into a context, then retrieve it with [FromCtx].
 //
 // The Logging destination is configured with an Exporter. This package provides Exporters for Google Cloud Logging, AWS CloudWatch,
 // and Console Logging.

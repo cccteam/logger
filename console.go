@@ -45,15 +45,11 @@ func (e *ConsoleExporter) NoColor(v bool) *ConsoleExporter {
 	return e
 }
 
-// NewLogger returns a Logger that exports logs to the console without the need for HTTP middleware.
+// NewLogger returns a context with a Logger that exports logs to the console.
 // This is useful for background jobs and other non-HTTP contexts.
-func (e *ConsoleExporter) NewLogger(ctx context.Context) *Logger {
-	l := newConsoleLogger(nil, e.noColor)
-
-	return &Logger{
-		ctx: newContext(ctx, l),
-		lg:  l,
-	}
+// Retrieve the Logger using [FromCtx].
+func (e *ConsoleExporter) NewLogger(ctx context.Context) context.Context {
+	return newContext(ctx, newConsoleLogger(nil, e.noColor))
 }
 
 // Middleware returns a middleware that exports logs to the console

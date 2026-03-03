@@ -34,17 +34,18 @@ func ExampleConsoleExporter_NoColor() {
 
 // This example demonstrates using the ConsoleExporter to create a Logger
 // for use outside of HTTP middleware, such as in background jobs.
+// The logger is injected into the context and retrieved with FromCtx.
 func ExampleConsoleExporter_NewLogger() {
 	exporter := NewConsoleExporter().NoColor(true)
 
-	// Create a logger for a background job
-	l := exporter.NewLogger(context.Background())
+	// Inject a logger into the context for a background job
+	ctx := exporter.NewLogger(context.Background())
 
-	// Use the logger as usual
-	l.Info("background job started")
-	l.Debugf("processing %d items", 42)
-	l.Warn("something might be wrong")
-	l.Error("something went wrong")
+	// Use FromCtx to retrieve the logger, just like in HTTP handlers
+	FromCtx(ctx).Info("background job started")
+	FromCtx(ctx).Debugf("processing %d items", 42)
+	FromCtx(ctx).Warn("something might be wrong")
+	FromCtx(ctx).Error("something went wrong")
 }
 
 // This example demonstrates creating an AWSExporter for logging
@@ -67,14 +68,15 @@ func ExampleNewAWSExporter() {
 
 // This example demonstrates using the AWSExporter to create a Logger
 // for use outside of HTTP middleware, such as in background jobs.
+// The logger is injected into the context and retrieved with FromCtx.
 func ExampleAWSExporter_NewLogger() {
 	exporter := NewAWSExporter(true)
 
-	// Create a logger for a background job
-	l := exporter.NewLogger(context.Background())
+	// Inject a logger into the context for a background job
+	ctx := exporter.NewLogger(context.Background())
 
-	// Use the logger as usual
-	l.Info("background job started")
+	// Use FromCtx to retrieve the logger
+	FromCtx(ctx).Info("background job started")
 }
 
 // This example demonstrates creating middleware from an Exporter using
@@ -106,11 +108,10 @@ func ExampleNewRequestLogger() {
 func ExampleFromCtx() {
 	exporter := NewConsoleExporter().NoColor(true)
 
-	// Create a logger and associate it with a context
-	l := exporter.NewLogger(context.Background())
-	ctx := NewCtx(context.Background(), l)
+	// Inject a logger into the context
+	ctx := exporter.NewLogger(context.Background())
 
-	// Later, retrieve the logger from the context
+	// Retrieve the logger from the context
 	FromCtx(ctx).Info("retrieved from context")
 }
 
@@ -138,13 +139,10 @@ func ExampleFromReq() {
 func ExampleNewCtx() {
 	exporter := NewConsoleExporter().NoColor(true)
 
-	// Create a logger
-	l := exporter.NewLogger(context.Background())
+	// Inject a logger into the context
+	ctx := exporter.NewLogger(context.Background())
 
-	// Associate it with a new context
-	ctx := NewCtx(context.Background(), l)
-
-	// The logger can be retrieved from the new context
+	// The logger can be retrieved from the context
 	FromCtx(ctx).Info("logger propagated via context")
 
 	// This is particularly useful when passing context to other functions
@@ -160,10 +158,10 @@ func exampleDoWork(ctx context.Context) {
 // lines rather than the parent request log.
 func ExampleLogger_WithAttributes() {
 	exporter := NewConsoleExporter().NoColor(true)
-	l := exporter.NewLogger(context.Background())
+	ctx := exporter.NewLogger(context.Background())
 
 	// Create a logger with additional attributes
-	attrLogger := l.WithAttributes().
+	attrLogger := FromCtx(ctx).WithAttributes().
 		AddAttribute("userID", "user-123").
 		AddAttribute("action", "login").
 		Logger()

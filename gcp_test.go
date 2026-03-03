@@ -117,26 +117,20 @@ func TestGoogleCloudExporter_NewLogger(t *testing.T) {
 
 	t.Run("without trace context", func(t *testing.T) {
 		e := NewGoogleCloudExporter(&logging.Client{}, "test-project")
-		ctx := context.Background()
-		l := e.NewLogger(ctx)
+		ctx := e.NewLogger(context.Background())
 
-		if l == nil {
-			t.Fatal("NewLogger() returned nil")
-		}
-
-		gcpLgr, ok := l.lg.(*gcpLogger)
+		gcpLgr, ok := fromCtx(ctx).(*gcpLogger)
 		if !ok {
-			t.Fatalf("NewLogger().lg type %T, want *gcpLogger", l.lg)
+			t.Fatalf("NewLogger() context logger type %T, want *gcpLogger", fromCtx(ctx))
 		}
 
 		if !strings.HasPrefix(gcpLgr.traceID, "projects/test-project/traces/") {
 			t.Errorf("traceID = %q, want prefix %q", gcpLgr.traceID, "projects/test-project/traces/")
 		}
 
-		// Verify the logger is in the context
-		ctxLgr := fromCtx(l.ctx)
-		if ctxLgr != gcpLgr {
-			t.Error("NewLogger().ctx does not contain the logger")
+		// Verify the logger is retrievable via FromCtx
+		if FromCtx(ctx).lg != gcpLgr {
+			t.Error("FromCtx(NewLogger()) does not return the expected logger")
 		}
 	})
 
@@ -144,11 +138,11 @@ func TestGoogleCloudExporter_NewLogger(t *testing.T) {
 		e := NewGoogleCloudExporter(&logging.Client{}, "test-project")
 		otel.SetTracerProvider(sdktrace.NewTracerProvider())
 		ctx, span := otel.Tracer("test/examples").Start(context.Background(), "test trace")
-		l := e.NewLogger(ctx)
+		ctx = e.NewLogger(ctx)
 
-		gcpLgr, ok := l.lg.(*gcpLogger)
+		gcpLgr, ok := fromCtx(ctx).(*gcpLogger)
 		if !ok {
-			t.Fatalf("NewLogger().lg type %T, want *gcpLogger", l.lg)
+			t.Fatalf("NewLogger() context logger type %T, want *gcpLogger", fromCtx(ctx))
 		}
 
 		wantPrefix := "projects/test-project/traces/"

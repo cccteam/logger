@@ -67,26 +67,20 @@ func TestAWSExporter_NewLogger(t *testing.T) {
 	t.Run("without trace context", func(t *testing.T) {
 		t.Parallel()
 		e := NewAWSExporter(true)
-		ctx := context.Background()
-		l := e.NewLogger(ctx)
+		ctx := e.NewLogger(context.Background())
 
-		if l == nil {
-			t.Fatal("NewLogger() returned nil")
-		}
-
-		awsLgr, ok := l.lg.(*awsLogger)
+		awsLgr, ok := fromCtx(ctx).(*awsLogger)
 		if !ok {
-			t.Fatalf("NewLogger().lg type %T, want *awsLogger", l.lg)
+			t.Fatalf("NewLogger() context logger type %T, want *awsLogger", fromCtx(ctx))
 		}
 
 		if awsLgr.traceID == "" {
 			t.Error("traceID should not be empty")
 		}
 
-		// Verify the logger is in the context
-		ctxLgr := fromCtx(l.ctx)
-		if ctxLgr != awsLgr {
-			t.Error("NewLogger().ctx does not contain the logger")
+		// Verify the logger is retrievable via FromCtx
+		if FromCtx(ctx).lg != awsLgr {
+			t.Error("FromCtx(NewLogger()) does not return the expected logger")
 		}
 	})
 
@@ -95,11 +89,11 @@ func TestAWSExporter_NewLogger(t *testing.T) {
 		e := NewAWSExporter(true)
 		otel.SetTracerProvider(sdktrace.NewTracerProvider())
 		ctx, span := otel.Tracer("test/examples").Start(context.Background(), "test trace")
-		l := e.NewLogger(ctx)
+		ctx = e.NewLogger(ctx)
 
-		awsLgr, ok := l.lg.(*awsLogger)
+		awsLgr, ok := fromCtx(ctx).(*awsLogger)
 		if !ok {
-			t.Fatalf("NewLogger().lg type %T, want *awsLogger", l.lg)
+			t.Fatalf("NewLogger() context logger type %T, want *awsLogger", fromCtx(ctx))
 		}
 
 		if awsLgr.traceID != span.SpanContext().TraceID().String() {

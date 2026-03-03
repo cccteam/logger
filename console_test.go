@@ -103,34 +103,27 @@ func TestConsoleExporter_NewLogger(t *testing.T) {
 	t.Run("default", func(t *testing.T) {
 		t.Parallel()
 		e := NewConsoleExporter()
-		ctx := context.Background()
-		l := e.NewLogger(ctx)
+		ctx := e.NewLogger(context.Background())
 
-		if l == nil {
-			t.Fatal("NewLogger() returned nil")
-		}
-
-		consoleLgr, ok := l.lg.(*consoleLogger)
+		consoleLgr, ok := fromCtx(ctx).(*consoleLogger)
 		if !ok {
-			t.Fatalf("NewLogger().lg type %T, want *consoleLogger", l.lg)
+			t.Fatalf("NewLogger() context logger type %T, want *consoleLogger", fromCtx(ctx))
 		}
 
-		// Verify the logger is in the context
-		ctxLgr := fromCtx(l.ctx)
-		if ctxLgr != consoleLgr {
-			t.Error("NewLogger().ctx does not contain the logger")
+		// Verify the logger is retrievable via FromCtx
+		if FromCtx(ctx).lg != consoleLgr {
+			t.Error("FromCtx(NewLogger()) does not return the expected logger")
 		}
 	})
 
 	t.Run("with noColor", func(t *testing.T) {
 		t.Parallel()
 		e := NewConsoleExporter().NoColor(true)
-		ctx := context.Background()
-		l := e.NewLogger(ctx)
+		ctx := e.NewLogger(context.Background())
 
-		consoleLgr, ok := l.lg.(*consoleLogger)
+		consoleLgr, ok := fromCtx(ctx).(*consoleLogger)
 		if !ok {
-			t.Fatalf("NewLogger().lg type %T, want *consoleLogger", l.lg)
+			t.Fatalf("NewLogger() context logger type %T, want *consoleLogger", fromCtx(ctx))
 		}
 
 		if !consoleLgr.noColor {
@@ -145,9 +138,9 @@ func TestConsoleExporter_NewLogger(t *testing.T) {
 		t.Cleanup(func() { log.SetOutput(os.Stderr) })
 
 		e := NewConsoleExporter().NoColor(true)
-		l := e.NewLogger(context.Background())
+		ctx := e.NewLogger(context.Background())
 
-		l.Info("test message")
+		FromCtx(ctx).Info("test message")
 
 		if !strings.Contains(buf.String(), "test message") {
 			t.Errorf("expected log output to contain 'test message', got %q", buf.String())

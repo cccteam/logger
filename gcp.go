@@ -41,17 +41,14 @@ func (e *GoogleCloudExporter) LogAll(v bool) *GoogleCloudExporter {
 	return e
 }
 
-// NewLogger returns a Logger that exports logs to Google Cloud Logging without the need for HTTP middleware.
+// NewLogger returns a context with a Logger that exports logs to Google Cloud Logging.
 // This is useful for background jobs and other non-HTTP contexts.
-func (e *GoogleCloudExporter) NewLogger(ctx context.Context) *Logger {
+// Retrieve the Logger using [FromCtx].
+func (e *GoogleCloudExporter) NewLogger(ctx context.Context) context.Context {
 	childLogger := e.client.Logger("request_child_log", e.opts...)
 	traceID := gcpTraceIDFromContext(ctx, e.projectID, generateID)
-	l := newGCPLogger(childLogger, traceID)
 
-	return &Logger{
-		ctx: newContext(ctx, l),
-		lg:  l,
-	}
+	return newContext(ctx, newGCPLogger(childLogger, traceID))
 }
 
 // Middleware returns a middleware that exports logs to Google Cloud Logging
