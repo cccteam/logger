@@ -61,6 +61,53 @@ func TestNewAWSExporter(t *testing.T) {
 	}
 }
 
+func TestAWSExporter_NewLogger(t *testing.T) {
+	t.Parallel()
+
+	t.Run("without trace context", func(t *testing.T) {
+		t.Parallel()
+		e := NewAWSExporter(true)
+		ctx := context.Background()
+		l := e.NewLogger(ctx)
+
+		if l == nil {
+			t.Fatal("NewLogger() returned nil")
+		}
+
+		awsLgr, ok := l.lg.(*awsLogger)
+		if !ok {
+			t.Fatalf("NewLogger().lg type %T, want *awsLogger", l.lg)
+		}
+
+		if awsLgr.traceID == "" {
+			t.Error("traceID should not be empty")
+		}
+
+		// Verify the logger is in the context
+		ctxLgr := fromCtx(l.ctx)
+		if ctxLgr != awsLgr {
+			t.Error("NewLogger().ctx does not contain the logger")
+		}
+	})
+
+	t.Run("with trace context", func(t *testing.T) {
+		t.Parallel()
+		e := NewAWSExporter(true)
+		otel.SetTracerProvider(sdktrace.NewTracerProvider())
+		ctx, span := otel.Tracer("test/examples").Start(context.Background(), "test trace")
+		l := e.NewLogger(ctx)
+
+		awsLgr, ok := l.lg.(*awsLogger)
+		if !ok {
+			t.Fatalf("NewLogger().lg type %T, want *awsLogger", l.lg)
+		}
+
+		if awsLgr.traceID != span.SpanContext().TraceID().String() {
+			t.Errorf("traceID = %q, want %q", awsLgr.traceID, span.SpanContext().TraceID().String())
+		}
+	})
+}
+
 func TestAWSExporter_Middleware(t *testing.T) {
 	t.Parallel()
 
@@ -287,6 +334,52 @@ func Test_awsTraceIDFromRequest(t *testing.T) {
 
 			if got := awsTraceIDFromRequest(r, func() string { return tt.args.traceStr }); got != want && (got == "0000000000000000") != tt.wantBlankStr {
 				t.Errorf("awsTraceIDFromRequest() = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+func Test_awsTraceIDFromContext(t *testing.T) {
+	t.Parallel()
+	type args struct {
+		mockCtx  func(traceStr string) (context.Context, string)
+		traceStr string
+	}
+	tests := []struct {
+		name         string
+		args         args
+		wantTraceStr string
+	}{
+		{
+			name: "no trace in context",
+			args: args{
+				mockCtx: func(wantTraceStr string) (context.Context, string) {
+					return context.Background(), wantTraceStr
+				},
+				traceStr: "105445aa7843bc8bf206b12000100000",
+			},
+			wantTraceStr: "105445aa7843bc8bf206b12000100000",
+		},
+		{
+			name: "with trace in context",
+			args: args{
+				mockCtx: func(_ string) (context.Context, string) {
+					otel.SetTracerProvider(sdktrace.NewTracerProvider())
+					ctx, span := otel.Tracer("test/examples").Start(context.Background(), "test trace")
+
+					return ctx, span.SpanContext().TraceID().String()
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, want := tt.args.mockCtx(tt.wantTraceStr)
+
+			if got := awsTraceIDFromContext(ctx, func() string { return tt.args.traceStr }); got != want {
+				t.Errorf("awsTraceIDFromContext() = %v, want %v", got, want)
 			}
 		})
 	}

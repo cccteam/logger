@@ -40,6 +40,19 @@ func NewAWSExporter(logAll bool) *AWSExporter {
 	}
 }
 
+// NewLogger returns a Logger that exports logs to AWS CloudWatch without the need for HTTP middleware.
+// This is useful for background jobs and other non-HTTP contexts.
+func (e *AWSExporter) NewLogger(ctx context.Context) *Logger {
+	lg := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	traceID := awsTraceIDFromContext(ctx, generateID)
+	l := newAWSLogger(lg, traceID)
+
+	return &Logger{
+		ctx: newContext(ctx, l),
+		lg:  l,
+	}
+}
+
 // Middleware returns a middleware that logs the request and injects a Logger into the context.
 func (e *AWSExporter) Middleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -274,6 +287,19 @@ func httpAttributes(r *http.Request, sw responseRecorder) []slog.Attr {
 		slog.String(awsHTTPSchemeKey, r.URL.Scheme),
 		slog.String(awsHTTPProtoKey, r.Proto),
 	}
+}
+
+// awsTraceIDFromContext retrieves the trace id from the context if possible
+func awsTraceIDFromContext(ctx context.Context, idgen func() string) string {
+	var traceID string
+	sc := trace.SpanFromContext(ctx).SpanContext()
+	if sc.IsValid() {
+		traceID = sc.TraceID().String()
+	} else {
+		traceID = idgen()
+	}
+
+	return traceID
 }
 
 // awsTraceIDFromRequest retrieves the trace id from the request if possible

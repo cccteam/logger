@@ -97,6 +97,64 @@ func TestConsoleExporter_NoColor(t *testing.T) {
 	}
 }
 
+func TestConsoleExporter_NewLogger(t *testing.T) {
+	t.Parallel()
+
+	t.Run("default", func(t *testing.T) {
+		t.Parallel()
+		e := NewConsoleExporter()
+		ctx := context.Background()
+		l := e.NewLogger(ctx)
+
+		if l == nil {
+			t.Fatal("NewLogger() returned nil")
+		}
+
+		consoleLgr, ok := l.lg.(*consoleLogger)
+		if !ok {
+			t.Fatalf("NewLogger().lg type %T, want *consoleLogger", l.lg)
+		}
+
+		// Verify the logger is in the context
+		ctxLgr := fromCtx(l.ctx)
+		if ctxLgr != consoleLgr {
+			t.Error("NewLogger().ctx does not contain the logger")
+		}
+	})
+
+	t.Run("with noColor", func(t *testing.T) {
+		t.Parallel()
+		e := NewConsoleExporter().NoColor(true)
+		ctx := context.Background()
+		l := e.NewLogger(ctx)
+
+		consoleLgr, ok := l.lg.(*consoleLogger)
+		if !ok {
+			t.Fatalf("NewLogger().lg type %T, want *consoleLogger", l.lg)
+		}
+
+		if !consoleLgr.noColor {
+			t.Error("expected noColor to be true")
+		}
+	})
+
+	t.Run("logging works", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+		e := NewConsoleExporter().NoColor(true)
+		l := e.NewLogger(context.Background())
+
+		l.Info("test message")
+
+		if !strings.Contains(buf.String(), "test message") {
+			t.Errorf("expected log output to contain 'test message', got %q", buf.String())
+		}
+	})
+}
+
 func TestConsoleExporter_Middleware(t *testing.T) {
 	t.Parallel()
 

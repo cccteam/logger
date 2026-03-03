@@ -1,5 +1,9 @@
-// Package logger is an HTTP request logger that implements correlated logging to one of several supported platforms.
-// Each HTTP request is logged as the parent log, with all logs generated during the request as child logs.
+// Package logger is a correlated logging library that supports exporting logs to one of several supported platforms.
+//
+// For HTTP request logging, each HTTP request is logged as the parent log, with all logs generated during the request as child logs.
+// Use [NewRequestLogger] to create middleware that automatically handles request correlation.
+//
+// For non-HTTP contexts such as background jobs, use the NewLogger method on each Exporter to create a Logger directly.
 //
 // The Logging destination is configured with an Exporter. This package provides Exporters for Google Cloud Logging, AWS CloudWatch,
 // and Console Logging.
