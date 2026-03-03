@@ -45,6 +45,13 @@ func (e *ConsoleExporter) NoColor(v bool) *ConsoleExporter {
 	return e
 }
 
+// NewLogger returns a context with a Logger that exports logs to the console.
+// This is useful for background jobs and other non-HTTP contexts.
+// Retrieve the Logger using [FromCtx].
+func (e *ConsoleExporter) NewLogger(ctx context.Context) context.Context {
+	return newContext(ctx, newConsoleLogger(nil, e.noColor))
+}
+
 // Middleware returns a middleware that exports logs to the console
 func (e *ConsoleExporter) Middleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

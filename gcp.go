@@ -41,6 +41,16 @@ func (e *GoogleCloudExporter) LogAll(v bool) *GoogleCloudExporter {
 	return e
 }
 
+// NewLogger returns a context with a Logger that exports logs to Google Cloud Logging.
+// This is useful for background jobs and other non-HTTP contexts.
+// Retrieve the Logger using [FromCtx].
+func (e *GoogleCloudExporter) NewLogger(ctx context.Context) context.Context {
+	childLogger := e.client.Logger("request_child_log", e.opts...)
+	traceID := gcpTraceIDFromContext(ctx, e.projectID, generateID)
+
+	return newContext(ctx, newGCPLogger(childLogger, traceID))
+}
+
 // Middleware returns a middleware that exports logs to Google Cloud Logging
 func (e *GoogleCloudExporter) Middleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -109,6 +119,18 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			RemoteIP:     r.Header.Get("X-Forwarded-For"),
 		},
 	})
+}
+
+// gcpTraceIDFromContext formats a trace_id value for GCP Stackdriver from a context
+func gcpTraceIDFromContext(ctx context.Context, projectID string, idgen func() string) string {
+	var traceID string
+	if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
+		traceID = sc.TraceID().String()
+	} else {
+		traceID = idgen()
+	}
+
+	return fmt.Sprintf("projects/%s/traces/%s", projectID, traceID)
 }
 
 // gcpTraceIDFromRequest formats a trace_id value for GCP Stackdriver

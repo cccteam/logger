@@ -112,6 +112,54 @@ func TestGoogleCloudExporter_LogAll(t *testing.T) {
 	}
 }
 
+func TestGoogleCloudExporter_NewLogger(t *testing.T) {
+	disableMetaServertest(t)
+
+	t.Run("without trace context", func(t *testing.T) {
+		e := NewGoogleCloudExporter(&logging.Client{}, "test-project")
+		ctx := e.NewLogger(context.Background())
+
+		gcpLgr, ok := fromCtx(ctx).(*gcpLogger)
+		if !ok {
+			t.Fatalf("NewLogger() context logger type %T, want *gcpLogger", fromCtx(ctx))
+		}
+
+		if !strings.HasPrefix(gcpLgr.traceID, "projects/test-project/traces/") {
+			t.Errorf("traceID = %q, want prefix %q", gcpLgr.traceID, "projects/test-project/traces/")
+		}
+
+		// Verify the logger is retrievable via FromCtx
+		if FromCtx(ctx).lg != gcpLgr {
+			t.Error("FromCtx(NewLogger()) does not return the expected logger")
+		}
+	})
+
+	t.Run("with trace context", func(t *testing.T) {
+		e := NewGoogleCloudExporter(&logging.Client{}, "test-project")
+		otel.SetTracerProvider(sdktrace.NewTracerProvider())
+		ctx, span := otel.Tracer("test/examples").Start(context.Background(), "test trace")
+		ctx = e.NewLogger(ctx)
+
+		gcpLgr, ok := fromCtx(ctx).(*gcpLogger)
+		if !ok {
+			t.Fatalf("NewLogger() context logger type %T, want *gcpLogger", fromCtx(ctx))
+		}
+
+		wantPrefix := "projects/test-project/traces/"
+		if !strings.HasPrefix(gcpLgr.traceID, wantPrefix) {
+			t.Errorf("traceID = %q, want prefix %q", gcpLgr.traceID, wantPrefix)
+		}
+
+		// If the span has a valid trace ID, verify it matches
+		if spanTraceID := span.SpanContext().TraceID().String(); spanTraceID != "00000000000000000000000000000000" {
+			wantTraceID := fmt.Sprintf("projects/test-project/traces/%s", spanTraceID)
+			if gcpLgr.traceID != wantTraceID {
+				t.Errorf("traceID = %q, want %q", gcpLgr.traceID, wantTraceID)
+			}
+		}
+	})
+}
+
 func TestGoogleCloudExporter_Middleware(t *testing.T) {
 	disableMetaServertest(t)
 
@@ -387,6 +435,59 @@ func Test_gcpTraceIDFromRequest(t *testing.T) {
 
 			if got := gcpTraceIDFromRequest(r, tt.args.projectID, func() string { return tt.args.traceStr }); got != want {
 				t.Errorf("gcpTraceIDFromRequest() = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+func Test_gcpTraceIDFromContext(t *testing.T) {
+	t.Parallel()
+	type args struct {
+		mockCtx   func(traceStr string) (context.Context, string)
+		projectID string
+		traceStr  string
+	}
+	tests := []struct {
+		name            string
+		args            args
+		wantTracePrefix string
+		wantTraceStr    string
+	}{
+		{
+			name: "no trace in context",
+			args: args{
+				mockCtx: func(wantTraceStr string) (context.Context, string) {
+					return context.Background(), wantTraceStr
+				},
+				projectID: "my-project",
+				traceStr:  "105445aa7843bc8bf206b12000100000",
+			},
+			wantTracePrefix: "projects/my-project/traces/",
+			wantTraceStr:    "105445aa7843bc8bf206b12000100000",
+		},
+		{
+			name: "with trace in context",
+			args: args{
+				mockCtx: func(_ string) (context.Context, string) {
+					otel.SetTracerProvider(sdktrace.NewTracerProvider())
+					ctx, span := otel.Tracer("test/examples").Start(context.Background(), "test trace")
+
+					return ctx, span.SpanContext().TraceID().String()
+				},
+				projectID: "my-project",
+			},
+			wantTracePrefix: "projects/my-project/traces/",
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, traceStr := tt.args.mockCtx(tt.wantTraceStr)
+			want := tt.wantTracePrefix + traceStr
+
+			if got := gcpTraceIDFromContext(ctx, tt.args.projectID, func() string { return tt.args.traceStr }); got != want {
+				t.Errorf("gcpTraceIDFromContext() = %v, want %v", got, want)
 			}
 		})
 	}
