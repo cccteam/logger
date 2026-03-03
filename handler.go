@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
@@ -18,9 +19,12 @@ func NewRequestLogger(e Exporter) func(http.Handler) http.Handler {
 	return e.Middleware()
 }
 
-// Exporter is the interface for implementing a middleware to export logs to some destination
+// Exporter is the interface for implementing log exporters.
+// Middleware returns HTTP middleware that injects a Logger into the request context.
+// NewLogger injects a Logger into the given context for use outside of HTTP middleware.
 type Exporter interface {
 	Middleware() func(http.Handler) http.Handler
+	NewLogger(ctx context.Context) context.Context
 }
 
 func requestSize(length string) int64 {
