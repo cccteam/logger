@@ -152,7 +152,7 @@ linters:
           - paralleltest
           - tparallel
         path: gcp_test\.go
-        text: Test_gcpTraceIDFromRequest|TestGoogleCloudExporter_Middleware
+        text: Test_gcpTraceIDFromRequest|TestGoogleCloudExporter_Middleware|TestGoogleCloudExporter_NewLogger
       - linters:
           - gocritic
         path: gcp_test\.go|handler_test\.go
