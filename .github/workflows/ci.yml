@@ -15,7 +15,7 @@ jobs:
       security-events: write
     uses: cccteam/github-workflows/.github/workflows/golang-ci.yml@v5.22.0
     with:
-      golangci-lint-version: 'v2.4.0'
+      golangci-lint-version: 'v2.11.3'
       build-tags: '["", "dev", "consolelog"]'
   semantic-titles:
     permissions:
