@@ -185,7 +185,7 @@ func TestGoogleCloudExporter_CliRunner(t *testing.T) {
 			fields: fields{
 				projectID: "My project",
 				client:    &logging.Client{},
-				logAll:    true,
+				logAll:    false,
 			},
 			command: "gcp-command --flag",
 			fn: func(c context.Context) {
