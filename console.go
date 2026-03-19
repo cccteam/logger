@@ -19,7 +19,7 @@ const (
 	cslLogCount = "logCount"
 )
 
-type color int
+type color uint8
 
 const (
 	red    color = 31

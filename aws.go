@@ -268,10 +268,11 @@ func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
 	l.root.mu.Unlock()
 
 	span := trace.SpanFromContext(ctx)
-	attr := []slog.Attr{
+	attr := make([]slog.Attr, 0, 2+len(l.attributes))
+	attr = append(attr,
 		slog.String(awsTraceIDKey, l.traceID),
 		slog.String(awsSpanIDKey, span.SpanContext().SpanID().String()),
-	}
+	)
 	for k, v := range l.attributes {
 		attr = append(attr, slog.Any(k, v))
 	}
