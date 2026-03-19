@@ -51,6 +51,50 @@ func (e *AWSExporter) Middleware() func(http.Handler) http.Handler {
 	}
 }
 
+// CliRunner returns a function that executes the given function and creates a top-level parent log.
+func (e *AWSExporter) CliRunner() func(context.Context, string, func(context.Context)) {
+	return func(ctx context.Context, command string, f func(context.Context)) {
+		begin := time.Now()
+		var traceID string
+		if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
+			traceID = sc.TraceID().String()
+		} else {
+			traceID = generateID()
+		}
+
+		logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+		l := newAWSLogger(logger, traceID)
+		ctx = newContext(ctx, l)
+
+		f(ctx)
+
+		l.mu.Lock()
+		logCount := l.logCount
+		maxLevel := l.maxLevel
+		attributes := l.reqAttributes
+		l.mu.Unlock()
+
+		if !e.logAll && logCount == 0 {
+			return
+		}
+
+		sc := trace.SpanFromContext(ctx).SpanContext()
+
+		logAttr := []slog.Attr{
+			slog.Any(awsTraceIDKey, traceID),
+			slog.Any(awsSpanIDKey, sc.SpanID().String()),
+			slog.String(awsHTTPElapsedKey, time.Since(begin).String()),
+			slog.String(awsHTTPMethodKey, "CLI"),
+			slog.String(awsHTTPURLKey, command),
+		}
+		for k, v := range attributes {
+			logAttr = append(logAttr, slog.Any(k, v))
+		}
+
+		logger.LogAttrs(ctx, maxLevel, parentLogEntry, logAttr...)
+	}
+}
+
 type awsHandler struct {
 	next   http.Handler
 	logger awslog

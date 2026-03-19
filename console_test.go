@@ -137,6 +137,64 @@ func TestConsoleExporter_Middleware(t *testing.T) {
 	}
 }
 
+func TestConsoleExporter_CliRunner(t *testing.T) {
+	t.Parallel()
+
+	type fields struct {
+		noColor bool
+	}
+	tests := []struct {
+		name         string
+		fields       fields
+		command      string
+		fn           func(context.Context)
+		wantContains []string
+	}{
+		{
+			name: "call CliRunner",
+			fields: fields{
+				noColor: true,
+			},
+			command: "my-command --flag",
+			fn: func(c context.Context) {
+				logCtx := FromCtx(c)
+				logCtx.Info("test info log")
+				logCtx.AddRequestAttribute("test_key", "test_value")
+			},
+			wantContains: []string{
+				"INFO : test info log",
+				"CLI my-command --flag",
+				"test_key=test_value",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+			log.SetOutput(&buf)
+			t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+			e := &ConsoleExporter{
+				noColor: tt.fields.noColor,
+			}
+
+			runner := e.CliRunner()
+			ctx := context.Background()
+
+			runner(ctx, tt.command, tt.fn)
+
+			output := buf.String()
+			for _, want := range tt.wantContains {
+				if !strings.Contains(output, want) {
+					t.Errorf("Missing %q in output: %v", want, output)
+				}
+			}
+		})
+	}
+}
+
 func Test_consoleHandler_ServeHTTP(t *testing.T) {
 	t.Parallel()
 

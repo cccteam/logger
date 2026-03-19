@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"sync"
 	"time"
@@ -51,6 +52,68 @@ func (e *GoogleCloudExporter) Middleware() func(http.Handler) http.Handler {
 			projectID:    e.projectID,
 			logAll:       e.logAll,
 		}
+	}
+}
+
+// CliRunner returns a function that executes the given function and creates a top-level parent log.
+func (e *GoogleCloudExporter) CliRunner() func(context.Context, string, func(context.Context)) {
+	return func(ctx context.Context, command string, f func(context.Context)) {
+		begin := time.Now()
+
+		// generate traceID similarly to how gcpTraceIDFromRequest does it, but purely from context
+		var traceID string
+		if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
+			traceID = sc.TraceID().String()
+		} else {
+			traceID = generateID()
+		}
+		formattedTraceID := fmt.Sprintf("projects/%s/traces/%s", e.projectID, traceID)
+
+		childLogger := e.client.Logger("request_child_log", e.opts...)
+		parentLogger := e.client.Logger("request_parent_log", e.opts...)
+
+		l := newGCPLogger(childLogger, formattedTraceID)
+		ctx = newContext(ctx, l)
+
+		f(ctx)
+
+		l.mu.Lock()
+		logCount := l.logCount
+		maxSeverity := l.maxSeverity
+		attributes := make(map[string]any)
+		for k, v := range l.reqAttributes {
+			attributes[k] = v
+		}
+		l.mu.Unlock()
+
+		if !e.logAll && logCount == 0 {
+			return
+		}
+
+		sc := trace.SpanFromContext(ctx).SpanContext()
+		attributes[gcpMessageKey] = parentLogEntry
+
+		status := 0
+		if maxSeverity >= logging.Error {
+			status = 1
+		}
+
+		parentLogger.Log(logging.Entry{
+			Timestamp:    begin,
+			Severity:     maxSeverity,
+			Trace:        formattedTraceID,
+			SpanID:       sc.SpanID().String(),
+			TraceSampled: sc.IsSampled(),
+			Payload:      attributes,
+			HTTPRequest: &logging.HTTPRequest{
+				Request: &http.Request{
+					Method: "CLI",
+					URL:    &url.URL{Path: command},
+				},
+				Latency: time.Since(begin),
+				Status:  status,
+			},
+		})
 	}
 }
 

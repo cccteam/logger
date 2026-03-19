@@ -55,6 +55,32 @@ func (e *ConsoleExporter) Middleware() func(http.Handler) http.Handler {
 	}
 }
 
+// CliRunner returns a function that executes the given function and creates a top-level parent log.
+func (e *ConsoleExporter) CliRunner() func(context.Context, string, func(context.Context)) {
+	return func(ctx context.Context, command string, f func(context.Context)) {
+		begin := time.Now()
+		// Reusing newConsoleLogger but passing nil for the http.Request since it's a CLI run
+		l := newConsoleLogger(nil, e.noColor)
+		ctx = newContext(ctx, l)
+
+		f(ctx)
+
+		l.mu.Lock()
+		logCount := l.logCount
+		maxSeverity := l.maxSeverity
+		attributes := l.reqAttributes
+		l.mu.Unlock()
+
+		var msg strings.Builder
+		fmt.Fprintf(&msg, "CLI %s %s %s=%d", command, time.Since(begin), cslLogCount, logCount)
+		for k, v := range attributes {
+			fmt.Fprintf(&msg, " %s=%v", k, v)
+		}
+
+		l.console(maxSeverity, severityColor(maxSeverity), msg.String())
+	}
+}
+
 type consoleHandler struct {
 	next    http.Handler
 	noColor bool

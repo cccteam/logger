@@ -166,6 +166,53 @@ func TestGoogleCloudExporter_Middleware(t *testing.T) {
 	}
 }
 
+func TestGoogleCloudExporter_CliRunner(t *testing.T) {
+	disableMetaServertest(t)
+
+	type fields struct {
+		projectID string
+		client    *logging.Client
+		logAll    bool
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		command string
+		fn      func(context.Context)
+	}{
+		{
+			name: "call CliRunner",
+			fields: fields{
+				projectID: "My project",
+				client:    &logging.Client{},
+				logAll:    true,
+			},
+			command: "gcp-command --flag",
+			fn: func(c context.Context) {
+				logCtx := FromCtx(c)
+				// don't log to prevent actual network calls from failing during tests with an empty unauthenticated client
+				logCtx.AddRequestAttribute("test_gcp_key", "test_gcp_value")
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(_ *testing.T) {
+			e := &GoogleCloudExporter{
+				projectID: tt.fields.projectID,
+				client:    tt.fields.client,
+				logAll:    tt.fields.logAll,
+			}
+
+			runner := e.CliRunner()
+			ctx := context.Background()
+
+			// The client is unauthenticated so writing the logs may fail/hang or output to stderr,
+			// but we're mostly testing that it doesn't panic and behaves like other middleware
+			runner(ctx, tt.command, tt.fn)
+		})
+	}
+}
+
 func Test_gcpHandler_ServeHTTP(t *testing.T) {
 	t.Parallel()
 

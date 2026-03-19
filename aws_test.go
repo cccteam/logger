@@ -103,6 +103,48 @@ func TestAWSExporter_Middleware(t *testing.T) {
 	}
 }
 
+func TestAWSExporter_CliRunner(t *testing.T) {
+	t.Parallel()
+
+	type fields struct {
+		logAll bool
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		command string
+		fn      func(context.Context)
+	}{
+		{
+			name: "call CliRunner",
+			fields: fields{
+				logAll: true,
+			},
+			command: "aws-command --test",
+			fn: func(c context.Context) {
+				logCtx := FromCtx(c)
+				logCtx.Info("test aws info log")
+				logCtx.AddRequestAttribute("test_aws_key", "test_aws_value")
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			e := &AWSExporter{
+				logAll: tt.fields.logAll,
+			}
+
+			runner := e.CliRunner()
+			ctx := context.Background()
+
+			// To properly capture stdout we'd need a pipe, but here we can just test it doesn't panic
+			runner(ctx, tt.command, tt.fn)
+		})
+	}
+}
+
 func Test_awsHandler_ServeHTTP(t *testing.T) {
 	t.Parallel()
 
