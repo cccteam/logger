@@ -291,7 +291,7 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 			if len(l.attrs) != 15 {
 				t.Errorf("Expected %d request attributes, got %d", 15, len(l.attrs))
 			}
-			
+
 			hasLogType := false
 			hasRequestType := false
 			for _, attr := range l.attrs {
