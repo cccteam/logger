@@ -352,7 +352,7 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			}
 
 			w := httptest.NewRecorder()
-			r := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
 			handler.ServeHTTP(w, r)
 
 			if !handlerCalled {
@@ -429,7 +429,7 @@ func Test_gcpTraceIDFromRequest(t *testing.T) {
 					otel.SetTracerProvider(sdktrace.NewTracerProvider())
 					ctx, span := otel.Tracer("test/examples").Start(context.Background(), "test trace")
 
-					r = httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+					r = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
 					r = r.WithContext(ctx)
 
 					return r, span.SpanContext().TraceID().String()
@@ -444,7 +444,7 @@ func Test_gcpTraceIDFromRequest(t *testing.T) {
 			name: "with propagation span in headers",
 			args: args{
 				mockReq: func(wantTraceStr string) (r *http.Request, traceStr string) {
-					r = httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+					r = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
 					r.Header.Add("X-Cloud-Trace-Context", wantTraceStr+"/1;o=1")
 
 					return r, wantTraceStr

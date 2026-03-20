@@ -276,7 +276,7 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 				),
 			}
 
-			r := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
 			handler.ServeHTTP(httptest.NewRecorder(), r)
 
 			if !handlerCalled {
@@ -349,7 +349,7 @@ func Test_awsTraceIDFromRequest(t *testing.T) {
 					otel.SetTracerProvider(sdktrace.NewTracerProvider())
 					ctx, span := otel.Tracer("test/examples").Start(context.Background(), "test trace")
 
-					r = httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+					r = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
 					r = r.WithContext(ctx)
 
 					return r, span.SpanContext().TraceID().String()
