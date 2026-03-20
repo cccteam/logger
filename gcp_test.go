@@ -379,6 +379,14 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 				}
 			}
 
+			wantLabels := map[string]string{
+				"log_type":     "request",
+				"request_type": "http",
+			}
+			if diff := cmp.Diff(l.e.Labels, wantLabels); diff != "" {
+				t.Errorf("Labels mismatch (-want +got):\n%s", diff)
+			}
+
 			if l.e.HTTPRequest.Status != tt.args.status {
 				t.Errorf("Status = %v, want %v", l.e.HTTPRequest.Status, tt.args.status)
 			}

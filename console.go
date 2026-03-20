@@ -72,7 +72,7 @@ func (e *ConsoleExporter) CliRunner() func(context.Context, string, func(context
 		l.mu.Unlock()
 
 		var msg strings.Builder
-		fmt.Fprintf(&msg, "CLI %s %s %s=%d", command, time.Since(begin), cslLogCount, logCount)
+		fmt.Fprintf(&msg, "CLI %s %s %s=%d log_type=request request_type=cli", command, time.Since(begin), cslLogCount, logCount)
 		for k, v := range attributes {
 			fmt.Fprintf(&msg, " %s=%v", k, v)
 		}
@@ -108,7 +108,7 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var msg strings.Builder
-	fmt.Fprintf(&msg, "%s %s %d %s %s=%d %s=%d %s=%d", r.Method, r.URL.Path, sw.Status(), time.Since(begin),
+	fmt.Fprintf(&msg, "%s %s %d %s %s=%d %s=%d %s=%d log_type=request request_type=http", r.Method, r.URL.Path, sw.Status(), time.Since(begin),
 		cslReqSize, requestSize(r.Header.Get("Content-Length")), cslRespSize, sw.Length(), cslLogCount, logCount)
 	for k, v := range attributes {
 		fmt.Fprintf(&msg, " %s=%v", k, v)

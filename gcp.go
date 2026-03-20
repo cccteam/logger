@@ -104,6 +104,7 @@ func (e *GoogleCloudExporter) CliRunner() func(context.Context, string, func(con
 			Trace:        formattedTraceID,
 			SpanID:       sc.SpanID().String(),
 			TraceSampled: sc.IsSampled(),
+			Labels:       map[string]string{"log_type": "request", "request_type": "cli"},
 			Payload:      attributes,
 			HTTPRequest: &logging.HTTPRequest{
 				Request: &http.Request{
@@ -164,6 +165,7 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Trace:        traceID,
 		SpanID:       sc.SpanID().String(),
 		TraceSampled: sc.IsSampled(),
+		Labels:       map[string]string{"log_type": "request", "request_type": "http"},
 		Payload:      attributes,
 		HTTPRequest: &logging.HTTPRequest{
 			Request:      r,

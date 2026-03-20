@@ -86,6 +86,8 @@ func (e *AWSExporter) CliRunner() func(context.Context, string, func(context.Con
 			slog.String(awsHTTPElapsedKey, time.Since(begin).String()),
 			slog.String(awsHTTPMethodKey, "CLI"),
 			slog.String(awsHTTPURLKey, command),
+			slog.String("log_type", "request"),
+			slog.String("request_type", "cli"),
 		}
 		for k, v := range attributes {
 			logAttr = append(logAttr, slog.Any(k, v))
@@ -135,6 +137,8 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.Any(awsTraceIDKey, xrayTraceID),
 		slog.Any(awsSpanIDKey, sc.SpanID().String()),
 		slog.String(awsHTTPElapsedKey, time.Since(begin).String()),
+		slog.String("log_type", "request"),
+		slog.String("request_type", "http"),
 	}
 	logAttr = append(logAttr, httpAttributes(r, sw)...)
 	for k, v := range attributes {

@@ -167,6 +167,8 @@ func TestConsoleExporter_CliRunner(t *testing.T) {
 				"INFO : test info log",
 				"CLI my-command --flag",
 				"test_key=test_value",
+				"log_type=request",
+				"request_type=cli",
 			},
 		},
 		{
@@ -185,6 +187,8 @@ func TestConsoleExporter_CliRunner(t *testing.T) {
 			wantContains: []string{
 				"INFO : an error occurred",
 				"CLI my-error-command --flag",
+				"log_type=request",
+				"request_type=cli",
 			},
 			wantErr: true,
 		},
