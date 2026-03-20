@@ -301,7 +301,7 @@ func Test_consoleHandler_ServeHTTP(t *testing.T) {
 			}
 
 			w := httptest.NewRecorder()
-			r := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
 			handler.ServeHTTP(w, r)
 
 			if !handlerCalled {
@@ -657,7 +657,7 @@ func Test_consoleAttributer_Logger(t *testing.T) {
 					root: &consoleLogger{
 						logCount: 123,
 					},
-					r:             httptest.NewRequest(http.MethodGet, "/test/url", http.NoBody),
+					r:             httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/test/url", http.NoBody),
 					noColor:       true,
 					rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
 					attributes:    map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},

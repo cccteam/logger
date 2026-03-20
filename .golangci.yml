@@ -149,6 +149,12 @@ linters:
         path: aws_test\.go
         text: 'G705: XSS'
 
+        # G706 is completely broken. Re-evaluate down the road.
+      - linters:
+          - gosec
+        path: console\.go
+        text: 'G706: Log'
+
       - linters:
           - paralleltest
           - tparallel
