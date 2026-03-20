@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.17](https://github.com/cccteam/logger/compare/v0.1.16...v0.1.17) (2026-03-20)
+
+
+### Features
+
+* Implement CliLogger ([#104](https://github.com/cccteam/logger/issues/104)) ([22057d2](https://github.com/cccteam/logger/commit/22057d2b2bb575d18208d7b955873f490bc508c7))
+
+
+### Code Upgrade
+
+* go 1.25.7 =&gt; 1.26.1 ([#100](https://github.com/cccteam/logger/issues/100)) ([ccead70](https://github.com/cccteam/logger/commit/ccead7039479de33459d08f2ef3d374a9cb184ba))
+
 ## [0.1.16](https://github.com/cccteam/logger/compare/v0.1.15...v0.1.16) (2026-02-10)
 
 
