@@ -170,6 +170,16 @@ linters:
         path: handler_test\.go
         text: TestNewCliLogger
       - linters:
+          - paralleltest
+          - tparallel
+        path: aws_test\.go
+        text: TestAWSExporter_CliRunner
+      - linters:
+          - paralleltest
+          - tparallel
+        path: console_test\.go
+        text: TestConsoleExporter_CliRunner
+      - linters:
           - gocritic
         path: gcp_test\.go|handler_test\.go
         text: e is heavy

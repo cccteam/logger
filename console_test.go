@@ -147,8 +147,9 @@ func TestConsoleExporter_CliRunner(t *testing.T) {
 		name         string
 		fields       fields
 		command      string
-		fn           func(context.Context)
+		fn           func(context.Context) error
 		wantContains []string
+		wantErr      bool
 	}{
 		{
 			name: "call CliRunner",
@@ -156,10 +157,11 @@ func TestConsoleExporter_CliRunner(t *testing.T) {
 				noColor: true,
 			},
 			command: "my-command --flag",
-			fn: func(c context.Context) {
+			fn: func(c context.Context) error {
 				logCtx := FromCtx(c)
 				logCtx.Info("test info log")
 				logCtx.AddRequestAttribute("test_key", "test_value")
+				return nil
 			},
 			wantContains: []string{
 				"INFO : test info log",
@@ -167,11 +169,29 @@ func TestConsoleExporter_CliRunner(t *testing.T) {
 				"test_key=test_value",
 			},
 		},
+		{
+			name: "call CliRunner with error",
+			fields: fields{
+				noColor: true,
+			},
+			command: "my-error-command --flag",
+			fn: func(c context.Context) error {
+				logCtx := FromCtx(c)
+				err := fmt.Errorf("an error occurred")
+				// simulate ignoring the error without explicitly logging it as Error level
+				logCtx.Info(err.Error())
+				return err
+			},
+			wantContains: []string{
+				"INFO : an error occurred",
+				"CLI my-error-command --flag",
+			},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			var buf bytes.Buffer
 			log.SetOutput(&buf)
 			t.Cleanup(func() { log.SetOutput(os.Stderr) })
@@ -183,7 +203,10 @@ func TestConsoleExporter_CliRunner(t *testing.T) {
 			runner := e.CliRunner()
 			ctx := context.Background()
 
-			runner(ctx, tt.command, tt.fn)
+			err := runner(ctx, tt.command, tt.fn)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ConsoleExporter.CliRunner() error = %v, wantErr %v", err, tt.wantErr)
+			}
 
 			output := buf.String()
 			for _, want := range tt.wantContains {

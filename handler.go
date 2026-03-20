@@ -21,14 +21,14 @@ func NewRequestLogger(e Exporter) func(http.Handler) http.Handler {
 
 // NewCliLogger returns a function that executes the given function and creates a top-level parent log.
 // The provided command string is used to identify the CLI execution in the logs.
-func NewCliLogger(e Exporter) func(ctx context.Context, command string, f func(context.Context)) {
+func NewCliLogger(e Exporter) func(ctx context.Context, command string, f func(context.Context) error) error {
 	return e.CliRunner()
 }
 
 // Exporter is the interface for implementing a middleware to export logs to some destination
 type Exporter interface {
 	Middleware() func(http.Handler) http.Handler
-	CliRunner() func(context.Context, string, func(context.Context))
+	CliRunner() func(ctx context.Context, command string, f func(context.Context) error) error
 }
 
 func requestSize(length string) int64 {

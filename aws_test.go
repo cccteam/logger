@@ -113,7 +113,8 @@ func TestAWSExporter_CliRunner(t *testing.T) {
 		name    string
 		fields  fields
 		command string
-		fn      func(context.Context)
+		fn      func(context.Context) error
+		wantErr bool
 	}{
 		{
 			name: "call CliRunner",
@@ -121,17 +122,31 @@ func TestAWSExporter_CliRunner(t *testing.T) {
 				logAll: true,
 			},
 			command: "aws-command --test",
-			fn: func(c context.Context) {
+			fn: func(c context.Context) error {
 				logCtx := FromCtx(c)
 				logCtx.Info("test aws info log")
 				logCtx.AddRequestAttribute("test_aws_key", "test_aws_value")
+				return nil
 			},
+		},
+		{
+			name: "call CliRunner with error",
+			fields: fields{
+				logAll: true,
+			},
+			command: "aws-error-command --test",
+			fn: func(c context.Context) error {
+				logCtx := FromCtx(c)
+				err := fmt.Errorf("aws error occurred")
+				// simulate ignoring the error without explicitly logging it as Error level
+				logCtx.Info(err.Error())
+				return err
+			},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			e := &AWSExporter{
 				logAll: tt.fields.logAll,
 			}
@@ -140,7 +155,10 @@ func TestAWSExporter_CliRunner(t *testing.T) {
 			ctx := context.Background()
 
 			// To properly capture stdout we'd need a pipe, but here we can just test it doesn't panic
-			runner(ctx, tt.command, tt.fn)
+			err := runner(ctx, tt.command, tt.fn)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("AWSExporter.CliRunner() error = %v, wantErr %v", err, tt.wantErr)
+			}
 		})
 	}
 }

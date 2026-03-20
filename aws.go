@@ -52,8 +52,8 @@ func (e *AWSExporter) Middleware() func(http.Handler) http.Handler {
 }
 
 // CliRunner returns a function that executes the given function and creates a top-level parent log.
-func (e *AWSExporter) CliRunner() func(context.Context, string, func(context.Context)) {
-	return func(ctx context.Context, command string, f func(context.Context)) {
+func (e *AWSExporter) CliRunner() func(context.Context, string, func(context.Context) error) error {
+	return func(ctx context.Context, command string, f func(context.Context) error) error {
 		begin := time.Now()
 		var traceID string
 		if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
@@ -66,7 +66,7 @@ func (e *AWSExporter) CliRunner() func(context.Context, string, func(context.Con
 		l := newAWSLogger(logger, traceID)
 		ctx = newContext(ctx, l)
 
-		f(ctx)
+		err := f(ctx)
 
 		l.mu.Lock()
 		logCount := l.logCount
@@ -75,7 +75,7 @@ func (e *AWSExporter) CliRunner() func(context.Context, string, func(context.Con
 		l.mu.Unlock()
 
 		if !e.logAll && logCount == 0 {
-			return
+			return err
 		}
 
 		sc := trace.SpanFromContext(ctx).SpanContext()
@@ -92,6 +92,8 @@ func (e *AWSExporter) CliRunner() func(context.Context, string, func(context.Con
 		}
 
 		logger.LogAttrs(ctx, maxLevel, parentLogEntry, logAttr...)
+
+		return err
 	}
 }
 

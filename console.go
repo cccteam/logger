@@ -56,14 +56,14 @@ func (e *ConsoleExporter) Middleware() func(http.Handler) http.Handler {
 }
 
 // CliRunner returns a function that executes the given function and creates a top-level parent log.
-func (e *ConsoleExporter) CliRunner() func(context.Context, string, func(context.Context)) {
-	return func(ctx context.Context, command string, f func(context.Context)) {
+func (e *ConsoleExporter) CliRunner() func(context.Context, string, func(context.Context) error) error {
+	return func(ctx context.Context, command string, f func(context.Context) error) error {
 		begin := time.Now()
 		// Reusing newConsoleLogger but passing nil for the http.Request since it's a CLI run
 		l := newConsoleLogger(nil, e.noColor)
 		ctx = newContext(ctx, l)
 
-		f(ctx)
+		err := f(ctx)
 
 		l.mu.Lock()
 		logCount := l.logCount
@@ -78,6 +78,8 @@ func (e *ConsoleExporter) CliRunner() func(context.Context, string, func(context
 		}
 
 		l.console(maxSeverity, severityColor(maxSeverity), msg.String())
+
+		return err
 	}
 }
 

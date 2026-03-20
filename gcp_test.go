@@ -178,7 +178,8 @@ func TestGoogleCloudExporter_CliRunner(t *testing.T) {
 		name    string
 		fields  fields
 		command string
-		fn      func(context.Context)
+		fn      func(context.Context) error
+		wantErr bool
 	}{
 		{
 			name: "call CliRunner",
@@ -188,15 +189,33 @@ func TestGoogleCloudExporter_CliRunner(t *testing.T) {
 				logAll:    false,
 			},
 			command: "gcp-command --flag",
-			fn: func(c context.Context) {
+			fn: func(c context.Context) error {
 				logCtx := FromCtx(c)
 				// don't log to prevent actual network calls from failing during tests with an empty unauthenticated client
 				logCtx.AddRequestAttribute("test_gcp_key", "test_gcp_value")
+				return nil
 			},
+		},
+		{
+			name: "call CliRunner with error",
+			fields: fields{
+				projectID: "My project",
+				client:    &logging.Client{},
+				logAll:    false,
+			},
+			command: "gcp-error-command --flag",
+			fn: func(c context.Context) error {
+				logCtx := FromCtx(c)
+				err := fmt.Errorf("gcp error occurred")
+				// don't explicitly elevate to error severity
+				logCtx.AddRequestAttribute("test_gcp_key", "test_gcp_value")
+				return err
+			},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(_ *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			e := &GoogleCloudExporter{
 				projectID: tt.fields.projectID,
 				client:    tt.fields.client,
@@ -208,7 +227,10 @@ func TestGoogleCloudExporter_CliRunner(t *testing.T) {
 
 			// The client is unauthenticated so writing the logs may fail/hang or output to stderr,
 			// but we're mostly testing that it doesn't panic and behaves like other middleware
-			runner(ctx, tt.command, tt.fn)
+			err := runner(ctx, tt.command, tt.fn)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GoogleCloudExporter.CliRunner() error = %v, wantErr %v", err, tt.wantErr)
+			}
 		})
 	}
 }

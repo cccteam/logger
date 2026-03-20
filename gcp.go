@@ -56,8 +56,8 @@ func (e *GoogleCloudExporter) Middleware() func(http.Handler) http.Handler {
 }
 
 // CliRunner returns a function that executes the given function and creates a top-level parent log.
-func (e *GoogleCloudExporter) CliRunner() func(context.Context, string, func(context.Context)) {
-	return func(ctx context.Context, command string, f func(context.Context)) {
+func (e *GoogleCloudExporter) CliRunner() func(context.Context, string, func(context.Context) error) error {
+	return func(ctx context.Context, command string, f func(context.Context) error) error {
 		begin := time.Now()
 
 		// generate traceID similarly to how gcpTraceIDFromRequest does it, but purely from context
@@ -75,7 +75,7 @@ func (e *GoogleCloudExporter) CliRunner() func(context.Context, string, func(con
 		l := newGCPLogger(childLogger, formattedTraceID)
 		ctx = newContext(ctx, l)
 
-		f(ctx)
+		err := f(ctx)
 
 		l.mu.Lock()
 		logCount := l.logCount
@@ -87,7 +87,7 @@ func (e *GoogleCloudExporter) CliRunner() func(context.Context, string, func(con
 		l.mu.Unlock()
 
 		if !e.logAll && logCount == 0 {
-			return
+			return err
 		}
 
 		sc := trace.SpanFromContext(ctx).SpanContext()
@@ -114,6 +114,8 @@ func (e *GoogleCloudExporter) CliRunner() func(context.Context, string, func(con
 				Status:  status,
 			},
 		})
+
+		return err
 	}
 }
 
