@@ -51,6 +51,54 @@ func (e *AWSExporter) Middleware() func(http.Handler) http.Handler {
 	}
 }
 
+// CliRunner returns a function that executes the given function and creates a top-level parent log.
+func (e *AWSExporter) CliRunner() func(context.Context, string, func(context.Context) error) error {
+	return func(ctx context.Context, command string, f func(context.Context) error) error {
+		begin := time.Now()
+		var traceID string
+		if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
+			traceID = sc.TraceID().String()
+		} else {
+			traceID = generateID()
+		}
+
+		logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+		l := newAWSLogger(logger, traceID)
+		ctx = newContext(ctx, l)
+
+		err := f(ctx)
+
+		l.mu.Lock()
+		logCount := l.logCount
+		maxLevel := l.maxLevel
+		attributes := l.reqAttributes
+		l.mu.Unlock()
+
+		if !e.logAll && logCount == 0 {
+			return err
+		}
+
+		sc := trace.SpanFromContext(ctx).SpanContext()
+
+		logAttr := []slog.Attr{
+			slog.Any(awsTraceIDKey, traceID),
+			slog.Any(awsSpanIDKey, sc.SpanID().String()),
+			slog.String(awsHTTPElapsedKey, time.Since(begin).String()),
+			slog.String(awsHTTPMethodKey, "CLI"),
+			slog.String(awsHTTPURLKey, command),
+			slog.String("log_type", "request"),
+			slog.String("request_type", "cli"),
+		}
+		for k, v := range attributes {
+			logAttr = append(logAttr, slog.Any(k, v))
+		}
+
+		logger.LogAttrs(ctx, maxLevel, parentLogEntry, logAttr...)
+
+		return err
+	}
+}
+
 type awsHandler struct {
 	next   http.Handler
 	logger awslog
@@ -89,6 +137,8 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.Any(awsTraceIDKey, xrayTraceID),
 		slog.Any(awsSpanIDKey, sc.SpanID().String()),
 		slog.String(awsHTTPElapsedKey, time.Since(begin).String()),
+		slog.String("log_type", "request"),
+		slog.String("request_type", "http"),
 	}
 	logAttr = append(logAttr, httpAttributes(r, sw)...)
 	for k, v := range attributes {
@@ -224,10 +274,11 @@ func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
 	l.root.mu.Unlock()
 
 	span := trace.SpanFromContext(ctx)
-	attr := []slog.Attr{
+	attr := make([]slog.Attr, 0, 2+len(l.attributes))
+	attr = append(attr,
 		slog.String(awsTraceIDKey, l.traceID),
 		slog.String(awsSpanIDKey, span.SpanContext().SpanID().String()),
-	}
+	)
 	for k, v := range l.attributes {
 		attr = append(attr, slog.Any(k, v))
 	}

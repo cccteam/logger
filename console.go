@@ -19,7 +19,7 @@ const (
 	cslLogCount = "logCount"
 )
 
-type color int
+type color uint8
 
 const (
 	red    color = 31
@@ -55,6 +55,34 @@ func (e *ConsoleExporter) Middleware() func(http.Handler) http.Handler {
 	}
 }
 
+// CliRunner returns a function that executes the given function and creates a top-level parent log.
+func (e *ConsoleExporter) CliRunner() func(context.Context, string, func(context.Context) error) error {
+	return func(ctx context.Context, command string, f func(context.Context) error) error {
+		begin := time.Now()
+		// Reusing newConsoleLogger but passing nil for the http.Request since it's a CLI run
+		l := newConsoleLogger(nil, e.noColor)
+		ctx = newContext(ctx, l)
+
+		err := f(ctx)
+
+		l.mu.Lock()
+		logCount := l.logCount
+		maxSeverity := l.maxSeverity
+		attributes := l.reqAttributes
+		l.mu.Unlock()
+
+		var msg strings.Builder
+		fmt.Fprintf(&msg, "CLI %s %s %s=%d log_type=request request_type=cli", command, time.Since(begin), cslLogCount, logCount)
+		for k, v := range attributes {
+			fmt.Fprintf(&msg, " %s=%v", k, v)
+		}
+
+		l.console(maxSeverity, severityColor(maxSeverity), msg.String())
+
+		return err
+	}
+}
+
 type consoleHandler struct {
 	next    http.Handler
 	noColor bool
@@ -80,7 +108,7 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var msg strings.Builder
-	fmt.Fprintf(&msg, "%s %s %d %s %s=%d %s=%d %s=%d", r.Method, r.URL.Path, sw.Status(), time.Since(begin),
+	fmt.Fprintf(&msg, "%s %s %d %s %s=%d %s=%d %s=%d log_type=request request_type=http", r.Method, r.URL.Path, sw.Status(), time.Since(begin),
 		cslReqSize, requestSize(r.Header.Get("Content-Length")), cslRespSize, sw.Length(), cslLogCount, logCount)
 	for k, v := range attributes {
 		fmt.Fprintf(&msg, " %s=%v", k, v)

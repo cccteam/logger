@@ -51,6 +51,34 @@ func TestNewRequestLogger(t *testing.T) {
 	}
 }
 
+func TestNewCliLogger(t *testing.T) {
+	disableMetaServertest(t)
+
+	type args struct {
+		e Exporter
+	}
+	tests := []struct {
+		name string
+		args args
+	}{
+		{
+			name: "Console Exporter",
+			args: args{
+				e: NewConsoleExporter(),
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			got := NewCliLogger(tt.args.e)
+			if got == nil {
+				t.Errorf("NewCliLogger() returned nil")
+			}
+		})
+	}
+}
+
 func Test_requestSize(t *testing.T) {
 	t.Parallel()
 

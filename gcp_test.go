@@ -166,6 +166,75 @@ func TestGoogleCloudExporter_Middleware(t *testing.T) {
 	}
 }
 
+func TestGoogleCloudExporter_CliRunner(t *testing.T) {
+	disableMetaServertest(t)
+
+	type fields struct {
+		projectID string
+		client    *logging.Client
+		logAll    bool
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		command string
+		fn      func(context.Context) error
+		wantErr bool
+	}{
+		{
+			name: "call CliRunner",
+			fields: fields{
+				projectID: "My project",
+				client:    &logging.Client{},
+				logAll:    false,
+			},
+			command: "gcp-command --flag",
+			fn: func(c context.Context) error {
+				logCtx := FromCtx(c)
+				// don't log to prevent actual network calls from failing during tests with an empty unauthenticated client
+				logCtx.AddRequestAttribute("test_gcp_key", "test_gcp_value")
+				return nil
+			},
+		},
+		{
+			name: "call CliRunner with error",
+			fields: fields{
+				projectID: "My project",
+				client:    &logging.Client{},
+				logAll:    false,
+			},
+			command: "gcp-error-command --flag",
+			fn: func(c context.Context) error {
+				logCtx := FromCtx(c)
+				err := fmt.Errorf("gcp error occurred")
+				// don't explicitly elevate to error severity
+				logCtx.AddRequestAttribute("test_gcp_key", "test_gcp_value")
+				return err
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := &GoogleCloudExporter{
+				projectID: tt.fields.projectID,
+				client:    tt.fields.client,
+				logAll:    tt.fields.logAll,
+			}
+
+			runner := e.CliRunner()
+			ctx := context.Background()
+
+			// The client is unauthenticated so writing the logs may fail/hang or output to stderr,
+			// but we're mostly testing that it doesn't panic and behaves like other middleware
+			err := runner(ctx, tt.command, tt.fn)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GoogleCloudExporter.CliRunner() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func Test_gcpHandler_ServeHTTP(t *testing.T) {
 	t.Parallel()
 
@@ -308,6 +377,14 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 				if diff := cmp.Diff(pl, wantPayload); diff != "" {
 					t.Errorf("Payload mismatch (-want +got):\n%s", diff)
 				}
+			}
+
+			wantLabels := map[string]string{
+				"log_type":     "request",
+				"request_type": "http",
+			}
+			if diff := cmp.Diff(l.e.Labels, wantLabels); diff != "" {
+				t.Errorf("Labels mismatch (-want +got):\n%s", diff)
 			}
 
 			if l.e.HTTPRequest.Status != tt.args.status {

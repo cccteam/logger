@@ -103,6 +103,66 @@ func TestAWSExporter_Middleware(t *testing.T) {
 	}
 }
 
+func TestAWSExporter_CliRunner(t *testing.T) {
+	t.Parallel()
+
+	type fields struct {
+		logAll bool
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		command string
+		fn      func(context.Context) error
+		wantErr bool
+	}{
+		{
+			name: "call CliRunner",
+			fields: fields{
+				logAll: true,
+			},
+			command: "aws-command --test",
+			fn: func(c context.Context) error {
+				logCtx := FromCtx(c)
+				logCtx.Info("test aws info log")
+				logCtx.AddRequestAttribute("test_aws_key", "test_aws_value")
+				return nil
+			},
+		},
+		{
+			name: "call CliRunner with error",
+			fields: fields{
+				logAll: true,
+			},
+			command: "aws-error-command --test",
+			fn: func(c context.Context) error {
+				logCtx := FromCtx(c)
+				err := fmt.Errorf("aws error occurred")
+				// simulate ignoring the error without explicitly logging it as Error level
+				logCtx.Info(err.Error())
+				return err
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := &AWSExporter{
+				logAll: tt.fields.logAll,
+			}
+
+			runner := e.CliRunner()
+			ctx := context.Background()
+
+			// To properly capture stdout we'd need a pipe, but here we can just test it doesn't panic
+			err := runner(ctx, tt.command, tt.fn)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("AWSExporter.CliRunner() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func Test_awsHandler_ServeHTTP(t *testing.T) {
 	t.Parallel()
 
@@ -228,9 +288,27 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 			if l.level != tt.wantLevel {
 				t.Errorf("Level = %v, want %v", l.level, tt.wantLevel)
 			}
-			if len(l.attrs) != 13 {
-				t.Errorf("Expected %d request attributes, got %d", 13, len(l.attrs))
+			if len(l.attrs) != 15 {
+				t.Errorf("Expected %d request attributes, got %d", 15, len(l.attrs))
 			}
+
+			hasLogType := false
+			hasRequestType := false
+			for _, attr := range l.attrs {
+				if attr.Key == "log_type" && attr.Value.String() == "request" {
+					hasLogType = true
+				}
+				if attr.Key == "request_type" && attr.Value.String() == "http" {
+					hasRequestType = true
+				}
+			}
+			if !hasLogType {
+				t.Errorf("Missing or incorrect log_type attribute")
+			}
+			if !hasRequestType {
+				t.Errorf("Missing or incorrect request_type attribute")
+			}
+
 			if l.msg != "Parent Log Entry" {
 				t.Errorf("Message = %v, want %v", l.msg, "Parent Log Entry")
 			}
