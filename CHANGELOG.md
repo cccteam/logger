@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.18](https://github.com/cccteam/logger/compare/v0.1.17...v0.1.18) (2026-03-21)
+
+
+### Bug Fixes
+
+* address active Trivy incident ([#106](https://github.com/cccteam/logger/issues/106)) ([3cb8e76](https://github.com/cccteam/logger/commit/3cb8e76d41234f50f0e29232126548d2e8c6c8f1))
+* Fix rendering of CLI log summary ([#108](https://github.com/cccteam/logger/issues/108)) ([9e1162b](https://github.com/cccteam/logger/commit/9e1162b18300bca861eb1821297e258d66602751))
+
+
+### Code Upgrade
+
+* Upgrade workfows ([#109](https://github.com/cccteam/logger/issues/109)) ([1f508b2](https://github.com/cccteam/logger/commit/1f508b262f736ee9d235f42cb7756e1bde36281d))
+
 ## [0.1.17](https://github.com/cccteam/logger/compare/v0.1.16...v0.1.17) (2026-03-20)
 
 
