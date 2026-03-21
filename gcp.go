@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"slices"
 	"sync"
 	"time"
@@ -91,12 +90,9 @@ func (e *GoogleCloudExporter) CliRunner() func(context.Context, string, func(con
 		}
 
 		sc := trace.SpanFromContext(ctx).SpanContext()
-		attributes[gcpMessageKey] = parentLogEntry
-
-		status := 0
-		if maxSeverity >= logging.Error {
-			status = 1
-		}
+		attributes[gcpMessageKey] = fmt.Sprintf("CLI [%s] %s", time.Since(begin), command)
+		attributes["latency"] = time.Since(begin)
+		attributes["command"] = command
 
 		parentLogger.Log(logging.Entry{
 			Timestamp:    begin,
@@ -106,14 +102,6 @@ func (e *GoogleCloudExporter) CliRunner() func(context.Context, string, func(con
 			TraceSampled: sc.IsSampled(),
 			Labels:       map[string]string{"log_type": "request", "request_type": "cli"},
 			Payload:      attributes,
-			HTTPRequest: &logging.HTTPRequest{
-				Request: &http.Request{
-					Method: "CLI",
-					URL:    &url.URL{Path: command},
-				},
-				Latency: time.Since(begin),
-				Status:  status,
-			},
 		})
 
 		return err
