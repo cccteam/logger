@@ -3,6 +3,7 @@ package logger
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"sync"
@@ -80,9 +81,7 @@ func (e *GoogleCloudExporter) CliRunner() func(context.Context, string, func(con
 		logCount := l.logCount
 		maxSeverity := l.maxSeverity
 		attributes := make(map[string]any)
-		for k, v := range l.reqAttributes {
-			attributes[k] = v
-		}
+		maps.Copy(attributes, l.reqAttributes)
 		l.mu.Unlock()
 
 		if !e.logAll && logCount == 0 {
@@ -128,9 +127,7 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	logCount := l.logCount
 	maxSeverity := l.maxSeverity
 	attributes := make(map[string]any)
-	for k, v := range l.reqAttributes {
-		attributes[k] = v
-	}
+	maps.Copy(attributes, l.reqAttributes)
 	l.mu.Unlock()
 
 	if !g.logAll && logCount == 0 {
@@ -280,9 +277,7 @@ func (l *gcpLogger) AddRequestAttribute(key string, value any) {
 // WithAttributes returns an attributer that can be used to add child (trace) log attributes
 func (l *gcpLogger) WithAttributes() attributer {
 	attrs := make(map[string]any)
-	for k, v := range l.attributes {
-		attrs[k] = v
-	}
+	maps.Copy(attrs, l.attributes)
 
 	return &gcpAttributer{logger: l, attributes: attrs}
 }
@@ -306,9 +301,7 @@ func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, msg any)
 
 	span := trace.SpanFromContext(ctx)
 	attrs := make(map[string]any)
-	for k, v := range l.attributes {
-		attrs[k] = v
-	}
+	maps.Copy(attrs, l.attributes)
 	attrs[gcpMessageKey] = msg
 
 	l.logger.Log(
@@ -343,9 +336,7 @@ func (a *gcpAttributer) AddAttribute(key string, value any) {
 // Logger returns a ctxLogger with the child (trace) attributes embedded
 func (a *gcpAttributer) Logger() ctxLogger {
 	l := a.logger.newChild()
-	for k, v := range a.attributes {
-		l.attributes[k] = v
-	}
+	maps.Copy(l.attributes, a.attributes)
 
 	return l
 }

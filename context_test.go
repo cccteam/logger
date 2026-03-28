@@ -42,7 +42,6 @@ func Test_fromCtx(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if got := fromCtx(tt.args.ctx); !reflect.DeepEqual(got, tt.want) {
@@ -76,7 +75,6 @@ func Test_fromReq(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if got := fromReq(tt.args.r); !reflect.DeepEqual(got, tt.want) {

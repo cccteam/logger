@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"slices"
@@ -249,9 +250,7 @@ func (l *awsLogger) AddRequestAttribute(key string, value any) {
 // WithAttributes returns an attributer that can be used to add child (trace) log attributes
 func (l *awsLogger) WithAttributes() attributer {
 	attrs := make(map[string]any)
-	for k, v := range l.attributes {
-		attrs[k] = v
-	}
+	maps.Copy(attrs, l.attributes)
 
 	return &awsAttributer{logger: l, attributes: attrs}
 }
@@ -302,9 +301,7 @@ func (a *awsAttributer) AddAttribute(key string, value any) {
 // Logger returns a ctxLogger with the child (trace) attributes embedded
 func (a *awsAttributer) Logger() ctxLogger {
 	l := a.logger.newChild()
-	for k, v := range a.attributes {
-		l.attributes[k] = v
-	}
+	maps.Copy(l.attributes, a.attributes)
 
 	return l
 }

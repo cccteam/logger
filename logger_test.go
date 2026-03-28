@@ -64,7 +64,6 @@ func TestLogger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -153,7 +152,6 @@ func TestLogger_AddRequestAttribute(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -191,7 +189,6 @@ func TestLogger_WithAttributes(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			ctxLgr := NewMockctxLogger(gomock.NewController(t))
@@ -229,7 +226,6 @@ func TestAttributerLogger_AddAttribute(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			mockAttributer := NewMockattributer(gomock.NewController(t))
@@ -265,7 +261,6 @@ func TestAttributerLogger_Logger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 

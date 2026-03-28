@@ -49,7 +49,6 @@ func TestNewAWSExporter(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := NewAWSExporter(tt.args.logAll)
@@ -87,7 +86,6 @@ func TestAWSExporter_Middleware(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			next := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
@@ -239,7 +237,6 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -341,7 +338,6 @@ func Test_awsTraceIDFromRequest(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			r, want := tt.args.mockReq(tt.wantTraceStr)
@@ -382,7 +378,6 @@ func Test_newAWSLogger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -464,7 +459,6 @@ func Test_awsLogger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -599,7 +593,6 @@ func Test_awsLogger_AddRequestAttribute(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			l := &awsLogger{
@@ -636,7 +629,6 @@ func Test_awsLogger_WithAttributes(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			l := &awsLogger{
@@ -720,7 +712,6 @@ func Test_awsAttributer_AddAttribute(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			a := &awsAttributer{
@@ -779,7 +770,6 @@ func Test_awsAttributer_Logger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			a := &awsAttributer{

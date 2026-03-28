@@ -40,7 +40,6 @@ func TestNewRequestLogger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
 			got := NewRequestLogger(tt.args.e)
@@ -69,7 +68,6 @@ func TestNewCliLogger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			got := NewCliLogger(tt.args.e)
 			if got == nil {
@@ -105,7 +103,6 @@ func Test_requestSize(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if got := requestSize(tt.args.length); got != tt.want {
@@ -139,7 +136,6 @@ func Test_recorder_Status(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			w := &recorder{
@@ -189,7 +185,6 @@ func Test_recorder_Length(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			w := &recorder{
@@ -236,7 +231,6 @@ func Test_recorder_WriteHeader(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			w := &recorder{
@@ -306,7 +300,6 @@ func Test_recorder_Write(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			w := &recorder{
@@ -340,7 +333,6 @@ func Test_generateID(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if got := generateID(); len(got)/2 != tt.wantLen {
@@ -389,7 +381,6 @@ func Test_recorderFlusher_Flush(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			r := tt.fields.recorder
