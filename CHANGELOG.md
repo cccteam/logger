@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.19](https://github.com/cccteam/logger/compare/v0.1.18...v0.1.19) (2026-03-28)
+
+
+### Features
+
+* Add `http.Hijacker` interface pass through ([#110](https://github.com/cccteam/logger/issues/110)) ([2af4f37](https://github.com/cccteam/logger/commit/2af4f3725bec4e5cc34cba3cba9302cc6597ac69))
+
+
+### Code Refactoring
+
+* Remove log_type and request_type labels as they did not work out ([#110](https://github.com/cccteam/logger/issues/110)) ([2af4f37](https://github.com/cccteam/logger/commit/2af4f3725bec4e5cc34cba3cba9302cc6597ac69))
+
 ## [0.1.18](https://github.com/cccteam/logger/compare/v0.1.17...v0.1.18) (2026-03-21)
 
 
