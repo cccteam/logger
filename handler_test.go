@@ -446,7 +446,10 @@ func Test_recorderHijacker_Hijack(t *testing.T) {
 			r := tt.fields.recorder
 			h, gotHijacker := r.(http.Hijacker)
 			if gotHijacker {
-				_, _, _ = h.Hijack()
+				_, _, err := h.Hijack()
+				if err != nil {
+					t.Fatalf("recorderHijacker.Hijack() error = %v", err)
+				}
 			}
 			if gotHijacker != tt.wantHijacker {
 				t.Fatalf("recorder foundHijacker = %v, want %v", gotHijacker, tt.wantHijacker)
@@ -484,7 +487,10 @@ func Test_recorderFlusherHijacker_FlushHijack(t *testing.T) {
 	if !gotHijacker {
 		t.Fatalf("expected http.Hijacker")
 	}
-	_, _, _ = h.Hijack()
+	_, _, err := h.Hijack()
+	if err != nil {
+		t.Fatalf("recorderFlusherHijacker.Hijack() error = %v", err)
+	}
 
 	rfh, ok := r.(*recorderFlusherHijacker)
 	if !ok {
