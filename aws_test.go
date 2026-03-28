@@ -49,7 +49,6 @@ func TestNewAWSExporter(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := NewAWSExporter(tt.args.logAll)
@@ -87,7 +86,6 @@ func TestAWSExporter_Middleware(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			next := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
@@ -239,7 +237,6 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -288,25 +285,8 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 			if l.level != tt.wantLevel {
 				t.Errorf("Level = %v, want %v", l.level, tt.wantLevel)
 			}
-			if len(l.attrs) != 15 {
-				t.Errorf("Expected %d request attributes, got %d", 15, len(l.attrs))
-			}
-
-			hasLogType := false
-			hasRequestType := false
-			for _, attr := range l.attrs {
-				if attr.Key == "log_type" && attr.Value.String() == "request" {
-					hasLogType = true
-				}
-				if attr.Key == "request_type" && attr.Value.String() == "http" {
-					hasRequestType = true
-				}
-			}
-			if !hasLogType {
-				t.Errorf("Missing or incorrect log_type attribute")
-			}
-			if !hasRequestType {
-				t.Errorf("Missing or incorrect request_type attribute")
+			if len(l.attrs) != 13 {
+				t.Errorf("Expected %d request attributes, got %d", 13, len(l.attrs))
 			}
 
 			if l.msg != "Parent Log Entry" {
@@ -358,7 +338,6 @@ func Test_awsTraceIDFromRequest(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			r, want := tt.args.mockReq(tt.wantTraceStr)
@@ -399,7 +378,6 @@ func Test_newAWSLogger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -481,7 +459,6 @@ func Test_awsLogger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -616,7 +593,6 @@ func Test_awsLogger_AddRequestAttribute(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			l := &awsLogger{
@@ -653,7 +629,6 @@ func Test_awsLogger_WithAttributes(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			l := &awsLogger{
@@ -737,7 +712,6 @@ func Test_awsAttributer_AddAttribute(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			a := &awsAttributer{
@@ -796,7 +770,6 @@ func Test_awsAttributer_Logger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			a := &awsAttributer{

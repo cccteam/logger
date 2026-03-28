@@ -33,7 +33,6 @@ func TestNewConsoleExporter(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if got := NewConsoleExporter(); !reflect.DeepEqual(got, tt.want) {
@@ -84,7 +83,6 @@ func TestConsoleExporter_NoColor(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			e := &ConsoleExporter{
@@ -122,7 +120,6 @@ func TestConsoleExporter_Middleware(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
@@ -165,10 +162,8 @@ func TestConsoleExporter_CliRunner(t *testing.T) {
 			},
 			wantContains: []string{
 				"INFO : test info log",
-				"CLI my-command --flag",
+				"] my-command --flag",
 				"test_key=test_value",
-				"log_type=request",
-				"request_type=cli",
 			},
 		},
 		{
@@ -186,15 +181,12 @@ func TestConsoleExporter_CliRunner(t *testing.T) {
 			},
 			wantContains: []string{
 				"INFO : an error occurred",
-				"CLI my-error-command --flag",
-				"log_type=request",
-				"request_type=cli",
+				"] my-error-command --flag",
 			},
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			log.SetOutput(&buf)
@@ -267,7 +259,6 @@ func Test_consoleHandler_ServeHTTP(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -347,7 +338,6 @@ func TestNewConsoleLogger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := newConsoleLogger(tt.args.r, tt.args.noColor)
@@ -524,7 +514,6 @@ func Test_consoleLogger_AddRequestAttribute(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			l := &consoleLogger{
@@ -561,7 +550,6 @@ func Test_consoleLogger_WithAttributes(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			l := &consoleLogger{
@@ -625,7 +613,6 @@ func Test_consoleAttributer_AddAttribute(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			a := &consoleAttributer{
@@ -681,7 +668,6 @@ func Test_consoleAttributer_Logger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			a := &consoleAttributer{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -72,7 +73,7 @@ func (e *ConsoleExporter) CliRunner() func(context.Context, string, func(context
 		l.mu.Unlock()
 
 		var msg strings.Builder
-		fmt.Fprintf(&msg, "CLI %s %s %s=%d log_type=request request_type=cli", command, time.Since(begin), cslLogCount, logCount)
+		fmt.Fprintf(&msg, "CLI [%s] %s %s=%d", time.Since(begin), command, cslLogCount, logCount)
 		for k, v := range attributes {
 			fmt.Fprintf(&msg, " %s=%v", k, v)
 		}
@@ -108,7 +109,7 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var msg strings.Builder
-	fmt.Fprintf(&msg, "%s %s %d %s %s=%d %s=%d %s=%d log_type=request request_type=http", r.Method, r.URL.Path, sw.Status(), time.Since(begin),
+	fmt.Fprintf(&msg, "%s %s %d %s %s=%d %s=%d %s=%d", r.Method, r.URL.Path, sw.Status(), time.Since(begin),
 		cslReqSize, requestSize(r.Header.Get("Content-Length")), cslRespSize, sw.Length(), cslLogCount, logCount)
 	for k, v := range attributes {
 		fmt.Fprintf(&msg, " %s=%v", k, v)
@@ -213,9 +214,7 @@ func (l *consoleLogger) AddRequestAttribute(key string, value any) {
 // WithAttributes returns an attributer that can be used to add child (trace) log attributes
 func (l *consoleLogger) WithAttributes() attributer {
 	attrs := make(map[string]any)
-	for k, v := range l.attributes {
-		attrs[k] = v
-	}
+	maps.Copy(attrs, l.attributes)
 
 	return &consoleAttributer{logger: l, attributes: attrs}
 }
@@ -269,9 +268,7 @@ func (a *consoleAttributer) AddAttribute(key string, value any) {
 // Logger returns a ctxLogger with the child (trace) attributes embedded
 func (a *consoleAttributer) Logger() ctxLogger {
 	l := a.logger.newChild()
-	for k, v := range a.attributes {
-		l.attributes[k] = v
-	}
+	maps.Copy(l.attributes, a.attributes)
 
 	return l
 }

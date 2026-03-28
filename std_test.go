@@ -133,7 +133,6 @@ func Test_stdErrLogger_WithAttributes(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			l := &stdErrLogger{
@@ -197,7 +196,6 @@ func Test_stdAttributer_AddAttribute(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			a := &stdAttributer{
@@ -237,7 +235,6 @@ func Test_stdAttributer_Logger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			a := &stdAttributer{

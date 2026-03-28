@@ -1,7 +1,9 @@
 package logger
 
 import (
+	"bufio"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -40,7 +42,6 @@ func TestNewRequestLogger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
 			got := NewRequestLogger(tt.args.e)
@@ -69,7 +70,6 @@ func TestNewCliLogger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			got := NewCliLogger(tt.args.e)
 			if got == nil {
@@ -105,7 +105,6 @@ func Test_requestSize(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if got := requestSize(tt.args.length); got != tt.want {
@@ -139,7 +138,6 @@ func Test_recorder_Status(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			w := &recorder{
@@ -189,7 +187,6 @@ func Test_recorder_Length(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			w := &recorder{
@@ -236,7 +233,6 @@ func Test_recorder_WriteHeader(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			w := &recorder{
@@ -306,7 +302,6 @@ func Test_recorder_Write(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			w := &recorder{
@@ -340,7 +335,6 @@ func Test_generateID(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if got := generateID(); len(got)/2 != tt.wantLen {
@@ -389,7 +383,6 @@ func Test_recorderFlusher_Flush(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			r := tt.fields.recorder
@@ -418,6 +411,103 @@ func Test_recorderFlusher_Flush(t *testing.T) {
 	}
 }
 
+func Test_recorderHijacker_Hijack(t *testing.T) {
+	t.Parallel()
+
+	type fields struct {
+		recorder http.ResponseWriter
+	}
+	tests := []struct {
+		name         string
+		fields       fields
+		wantHijacker bool
+		hijackCount  int
+	}{
+		{
+			name: "Hijacker",
+			fields: fields{
+				recorder: newResponseRecorder(&testResponseWriterHijacker{}),
+			},
+			wantHijacker: true,
+			hijackCount:  1,
+		},
+		{
+			name: "No hijacker",
+			fields: fields{
+				recorder: newResponseRecorder(&testResponseWriter{}),
+			},
+			wantHijacker: false,
+			hijackCount:  0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := tt.fields.recorder
+			h, gotHijacker := r.(http.Hijacker)
+			if gotHijacker {
+				_, _, err := h.Hijack()
+				if err != nil {
+					t.Fatalf("recorderHijacker.Hijack() error = %v", err)
+				}
+			}
+			if gotHijacker != tt.wantHijacker {
+				t.Fatalf("recorder foundHijacker = %v, want %v", gotHijacker, tt.wantHijacker)
+			}
+
+			if tt.wantHijacker {
+				rh, ok := r.(*recorderHijacker)
+				if !ok {
+					t.Fatalf("recorder not a recorderHijacker")
+				}
+				c, ok := rh.ResponseWriter.(*testResponseWriterHijacker)
+				if !ok {
+					t.Fatalf("ResponseWriter not a testResponseWriterHijacker")
+				}
+				if c.hijacked != tt.hijackCount {
+					t.Errorf("recorderHijacker.Hijack() = %v, want %v", c.hijacked, tt.hijackCount)
+				}
+			}
+		})
+	}
+}
+
+func Test_recorderFlusherHijacker_FlushHijack(t *testing.T) {
+	t.Parallel()
+
+	r := newResponseRecorder(&testResponseWriterFlusherHijacker{})
+
+	f, gotFlusher := r.(http.Flusher)
+	if !gotFlusher {
+		t.Fatalf("expected http.Flusher")
+	}
+	f.Flush()
+
+	h, gotHijacker := r.(http.Hijacker)
+	if !gotHijacker {
+		t.Fatalf("expected http.Hijacker")
+	}
+	_, _, err := h.Hijack()
+	if err != nil {
+		t.Fatalf("recorderFlusherHijacker.Hijack() error = %v", err)
+	}
+
+	rfh, ok := r.(*recorderFlusherHijacker)
+	if !ok {
+		t.Fatalf("recorder not a recorderFlusherHijacker")
+	}
+	c, ok := rfh.ResponseWriter.(*testResponseWriterFlusherHijacker)
+	if !ok {
+		t.Fatalf("ResponseWriter not a testResponseWriterFlusherHijacker")
+	}
+	if c.flushed != 1 {
+		t.Errorf("expected 1 flush, got %d", c.flushed)
+	}
+	if c.hijacked != 1 {
+		t.Errorf("expected 1 hijack, got %d", c.hijacked)
+	}
+}
+
 type testResponseWriter struct{}
 
 func (*testResponseWriter) Header() http.Header {
@@ -438,4 +528,29 @@ type testResponseWriterFlusher struct {
 
 func (t *testResponseWriterFlusher) Flush() {
 	t.flushed++
+}
+
+type testResponseWriterHijacker struct {
+	testResponseWriter
+	hijacked int
+}
+
+func (t *testResponseWriterHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	t.hijacked++
+	return nil, nil, nil
+}
+
+type testResponseWriterFlusherHijacker struct {
+	testResponseWriter
+	flushed  int
+	hijacked int
+}
+
+func (t *testResponseWriterFlusherHijacker) Flush() {
+	t.flushed++
+}
+
+func (t *testResponseWriterFlusherHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	t.hijacked++
+	return nil, nil, nil
 }

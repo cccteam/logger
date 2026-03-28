@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"maps"
 )
 
 var _ ctxLogger = (*stdErrLogger)(nil)
@@ -64,9 +65,7 @@ func (l *stdErrLogger) AddRequestAttribute(_ string, _ any) {}
 // WithAttributes returns an attributer that can be used to add child (trace) log attributes
 func (l *stdErrLogger) WithAttributes() attributer {
 	attrs := make(map[string]any)
-	for k, v := range l.attributes {
-		attrs[k] = v
-	}
+	maps.Copy(attrs, l.attributes)
 
 	return &stdAttributer{logger: l, attributes: attrs}
 }
@@ -98,9 +97,7 @@ func (a *stdAttributer) AddAttribute(key string, value any) {
 // Logger returns a ctxLogger with the child (trace) attributes embedded
 func (a *stdAttributer) Logger() ctxLogger {
 	l := newStdErrLogger()
-	for k, v := range a.attributes {
-		l.attributes[k] = v
-	}
+	maps.Copy(l.attributes, a.attributes)
 
 	return l
 }

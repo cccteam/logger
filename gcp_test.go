@@ -50,7 +50,6 @@ func TestNewGoogleCloudExporter(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := NewGoogleCloudExporter(tt.args.client, tt.args.projectID, tt.args.opts...)
@@ -98,7 +97,6 @@ func TestGoogleCloudExporter_LogAll(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			e := &GoogleCloudExporter{
@@ -149,7 +147,6 @@ func TestGoogleCloudExporter_Middleware(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
 			e := &GoogleCloudExporter{
@@ -311,7 +308,6 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -377,14 +373,6 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 				if diff := cmp.Diff(pl, wantPayload); diff != "" {
 					t.Errorf("Payload mismatch (-want +got):\n%s", diff)
 				}
-			}
-
-			wantLabels := map[string]string{
-				"log_type":     "request",
-				"request_type": "http",
-			}
-			if diff := cmp.Diff(l.e.Labels, wantLabels); diff != "" {
-				t.Errorf("Labels mismatch (-want +got):\n%s", diff)
 			}
 
 			if l.e.HTTPRequest.Status != tt.args.status {
@@ -456,7 +444,6 @@ func Test_gcpTraceIDFromRequest(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			r, traceStr := tt.args.mockReq(tt.wantTraceStr)
@@ -497,7 +484,6 @@ func Test_newGCPLogger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := newGCPLogger(tt.args.lg, tt.args.traceID)
@@ -578,7 +564,6 @@ func Test_gcpLogger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -711,7 +696,6 @@ func Test_gcpLogger_AddRequestAttribute(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			l := &gcpLogger{
@@ -748,7 +732,6 @@ func Test_gcpLogger_WithAttributes(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			l := &gcpLogger{
@@ -832,7 +815,6 @@ func Test_gcpAttributer_AddAttribute(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			a := &gcpAttributer{
@@ -889,7 +871,6 @@ func Test_gcpAttributer_Logger(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			a := &gcpAttributer{
@@ -930,17 +911,18 @@ type testLogger struct {
 }
 
 func (t *testLogger) Log(e logging.Entry) {
-	logStr := "trace=" + e.Trace + " severity=" + e.Severity.String() + " span=" + e.SpanID + " trace_sampled=" + fmt.Sprint(e.TraceSampled)
+	var logStr strings.Builder
+	logStr.WriteString("trace=" + e.Trace + " severity=" + e.Severity.String() + " span=" + e.SpanID + " trace_sampled=" + fmt.Sprint(e.TraceSampled))
 	attrs, ok := e.Payload.(map[string]any)
 	if ok {
 		for k, v := range attrs {
 			vStr, ok := v.(string)
 			if ok {
-				logStr += " " + k + "=" + vStr
+				logStr.WriteString(" " + k + "=" + vStr)
 			}
 		}
 	}
-	_, _ = t.buf.WriteString(logStr)
+	_, _ = t.buf.WriteString(logStr.String())
 }
 
 type captureLogger struct {
