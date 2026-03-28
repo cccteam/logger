@@ -1,9 +1,11 @@
 package logger
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"net"
 	"net/http"
 	"strconv"
 
@@ -41,16 +43,26 @@ func requestSize(length string) int64 {
 }
 
 func newResponseRecorder(w http.ResponseWriter) responseRecorder {
-	if _, ok := w.(http.Flusher); ok {
-		return &recorderFlusher{
-			recorder: recorder{
-				ResponseWriter: w,
-			},
-		}
-	}
+	_, isFlusher := w.(http.Flusher)
+	_, isHijacker := w.(http.Hijacker)
 
-	return &recorder{
-		ResponseWriter: w,
+	switch {
+	case isFlusher && isHijacker:
+		return &recorderFlusherHijacker{
+			recorder: recorder{ResponseWriter: w},
+		}
+	case isFlusher:
+		return &recorderFlusher{
+			recorder: recorder{ResponseWriter: w},
+		}
+	case isHijacker:
+		return &recorderHijacker{
+			recorder: recorder{ResponseWriter: w},
+		}
+	default:
+		return &recorder{
+			ResponseWriter: w,
+		}
 	}
 }
 
@@ -103,6 +115,46 @@ func (r *recorderFlusher) Flush() {
 	if f, ok := r.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+type recorderHijacker struct {
+	recorder
+}
+
+func (r *recorderHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := r.ResponseWriter.(http.Hijacker); ok {
+		conn, w, err := h.Hijack()
+		if err != nil {
+			return conn, w, errors.Wrap(err, "http.Hijacker.Hijack")
+		}
+
+		return conn, w, nil
+	}
+
+	return nil, nil, http.ErrNotSupported
+}
+
+type recorderFlusherHijacker struct {
+	recorder
+}
+
+func (r *recorderFlusherHijacker) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (r *recorderFlusherHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := r.ResponseWriter.(http.Hijacker); ok {
+		conn, w, err := h.Hijack()
+		if err != nil {
+			return conn, w, errors.Wrap(err, "http.Hijacker.Hijack")
+		}
+
+		return conn, w, nil
+	}
+
+	return nil, nil, http.ErrNotSupported
 }
 
 // generateID provides an id that matches the trace id format
