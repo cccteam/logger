@@ -86,7 +86,7 @@ func (e *AWSExporter) CliRunner() func(context.Context, string, func(context.Con
 			slog.Any(awsSpanIDKey, sc.SpanID().String()),
 			slog.String(awsHTTPElapsedKey, time.Since(begin).String()),
 			slog.String(awsHTTPMethodKey, "CLI"),
-			slog.String(awsHTTPURLKey, command),
+			slog.String(awsHTTPURLKey, fmt.Sprintf("[%s] %s", time.Since(begin), command)),
 		}
 		for k, v := range attributes {
 			logAttr = append(logAttr, slog.Any(k, v))

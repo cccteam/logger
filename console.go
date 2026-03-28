@@ -73,7 +73,7 @@ func (e *ConsoleExporter) CliRunner() func(context.Context, string, func(context
 		l.mu.Unlock()
 
 		var msg strings.Builder
-		fmt.Fprintf(&msg, "CLI %s %s %s=%d", command, time.Since(begin), cslLogCount, logCount)
+		fmt.Fprintf(&msg, "CLI [%s] %s %s=%d", time.Since(begin), command, cslLogCount, logCount)
 		for k, v := range attributes {
 			fmt.Fprintf(&msg, " %s=%v", k, v)
 		}
