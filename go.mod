@@ -1,6 +1,6 @@
 module github.com/cccteam/logger
 
-go 1.26.1
+go 1.26.2
 
 require (
 	cloud.google.com/go/logging v1.13.2
