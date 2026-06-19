@@ -98,6 +98,21 @@ func (e *AWSExporter) CliRunner() func(context.Context, string, func(context.Con
 	}
 }
 
+// DaemonContext returns a context with a logger that writes directly to stdout, unbuffered.
+func (e *AWSExporter) DaemonContext(ctx context.Context) context.Context {
+	var traceID string
+	if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
+		traceID = sc.TraceID().String()
+	} else {
+		traceID = generateID()
+	}
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	l := newAWSLogger(logger, traceID)
+
+	return newContext(ctx, l)
+}
+
 type awsHandler struct {
 	next   http.Handler
 	logger awslog

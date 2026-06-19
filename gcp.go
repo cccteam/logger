@@ -106,6 +106,22 @@ func (e *GoogleCloudExporter) CliRunner() func(context.Context, string, func(con
 	}
 }
 
+// DaemonContext returns a context with a logger that writes directly to the parent log, unbuffered.
+func (e *GoogleCloudExporter) DaemonContext(ctx context.Context) context.Context {
+	var traceID string
+	if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
+		traceID = sc.TraceID().String()
+	} else {
+		traceID = generateID()
+	}
+	formattedTraceID := fmt.Sprintf("projects/%s/traces/%s", e.projectID, traceID)
+
+	parentLogger := e.client.Logger("request_parent_log", e.opts...)
+	l := newGCPLogger(parentLogger, formattedTraceID)
+
+	return newContext(ctx, l)
+}
+
 type gcpHandler struct {
 	next         http.Handler
 	parentLogger logger
