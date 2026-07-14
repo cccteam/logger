@@ -31,6 +31,7 @@ func NewCliLogger(e Exporter) func(ctx context.Context, command string, f func(c
 type Exporter interface {
 	Middleware() func(http.Handler) http.Handler
 	CliRunner() func(ctx context.Context, command string, f func(context.Context) error) error
+	DaemonContext(ctx context.Context) context.Context
 }
 
 func requestSize(length string) int64 {

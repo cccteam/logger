@@ -84,6 +84,13 @@ func (e *ConsoleExporter) CliRunner() func(context.Context, string, func(context
 	}
 }
 
+// DaemonContext returns a context with a logger that writes directly to the console, unbuffered.
+func (e *ConsoleExporter) DaemonContext(ctx context.Context) context.Context {
+	l := newConsoleLogger(nil, e.noColor)
+
+	return newContext(ctx, l)
+}
+
 type consoleHandler struct {
 	next    http.Handler
 	noColor bool
