@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.25](https://github.com/cccteam/logger/compare/v0.1.24...v0.1.25) (2026-07-14)
+
+
+### Features
+
+* Add support for long running daemon logging ([#125](https://github.com/cccteam/logger/issues/125)) ([f976748](https://github.com/cccteam/logger/commit/f976748294e38248ff3d5c0b4c5122b694c24087))
+
 ## [0.1.24](https://github.com/cccteam/logger/compare/v0.1.23...v0.1.24) (2026-07-09)
 
 
