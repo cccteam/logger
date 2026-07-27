@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.26](https://github.com/cccteam/logger/compare/v0.1.25...v0.1.26) (2026-07-27)
+
+
+### Code Upgrade
+
+* go deps ([#134](https://github.com/cccteam/logger/issues/134)) ([0cf5aef](https://github.com/cccteam/logger/commit/0cf5aef853637b4d54403d24bcf24a6aee167887))
+
 ## [0.1.25](https://github.com/cccteam/logger/compare/v0.1.24...v0.1.25) (2026-07-14)
 
 
