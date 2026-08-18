@@ -442,6 +442,35 @@ func Test_gcpTraceIDFromRequest(t *testing.T) {
 			wantTracePrefix: "projects/my-project/traces/",
 			wantTraceStr:    "105445aa7843bc8bf206b12000100000",
 		},
+		{
+			name: "with propagation span in headers without span ID",
+			args: args{
+				mockReq: func(wantTraceStr string) (r *http.Request, traceStr string) {
+					r = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
+					r.Header.Add("X-Cloud-Trace-Context", wantTraceStr)
+
+					return r, wantTraceStr
+				},
+				projectID: "my-project",
+			},
+			wantTracePrefix: "projects/my-project/traces/",
+			wantTraceStr:    "105445aa7843bc8bf206b12000100000",
+		},
+		{
+			name: "with malformed propagation header",
+			args: args{
+				mockReq: func(wantTraceStr string) (r *http.Request, traceStr string) {
+					r = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
+					r.Header.Add("X-Cloud-Trace-Context", "not-a-trace-id/1;o=1")
+
+					return r, wantTraceStr
+				},
+				projectID: "my-project",
+				traceStr:  "105445aa7843bc8bf206b12000100000",
+			},
+			wantTracePrefix: "projects/my-project/traces/",
+			wantTraceStr:    "105445aa7843bc8bf206b12000100000",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
