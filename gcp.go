@@ -2,15 +2,16 @@ package logger
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"cloud.google.com/go/logging"
-	"contrib.go.opencensus.io/exporter/stackdriver/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -182,15 +183,29 @@ func gcpTraceIDFromRequest(r *http.Request, projectID string, idgen func() strin
 	var traceID string
 	if sc := trace.SpanFromContext(r.Context()).SpanContext(); sc.IsValid() {
 		traceID = sc.TraceID().String()
+	} else if id, ok := traceIDFromHeader(r.Header.Get("X-Cloud-Trace-Context")); ok {
+		traceID = id
 	} else {
-		if sc1, ok := new(propagation.HTTPFormat).SpanContextFromRequest(r); ok {
-			traceID = sc1.TraceID.String()
-		} else {
-			traceID = idgen()
-		}
+		traceID = idgen()
 	}
 
 	return fmt.Sprintf("projects/%s/traces/%s", projectID, traceID)
+}
+
+// traceIDFromHeader extracts the trace ID from an X-Cloud-Trace-Context header
+// value, which GCP infrastructure (load balancers, App Engine, etc.) formats as
+// "TRACE_ID/SPAN_ID;o=OPTIONS" where TRACE_ID is 32 hex characters.
+// See https://cloud.google.com/trace/docs/trace-context
+func traceIDFromHeader(h string) (string, bool) {
+	if i := strings.IndexByte(h, '/'); i >= 0 {
+		h = h[:i]
+	}
+	buf, err := hex.DecodeString(h)
+	if err != nil || len(buf) != 16 {
+		return "", false
+	}
+
+	return hex.EncodeToString(buf), true
 }
 
 // logger interface exists for testability
