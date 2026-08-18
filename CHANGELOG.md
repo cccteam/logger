@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.27](https://github.com/cccteam/logger/compare/v0.1.26...v0.1.27) (2026-08-18)
+
+
+### Code Upgrade
+
+* Remove archived OpenCensus stackdriver dependency ([#137](https://github.com/cccteam/logger/issues/137)) ([d21a2e8](https://github.com/cccteam/logger/commit/d21a2e8b5e423ec8d46d9947e768f866b2cbbd00))
+
 ## [0.1.26](https://github.com/cccteam/logger/compare/v0.1.25...v0.1.26) (2026-07-27)
 
 
