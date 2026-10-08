@@ -8,6 +8,17 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    commit-message:
+      # The pull request title is the squash commit's subject, and release-please releases a
+      # merge by its type: chore and build are hidden, so a dependency bump merged under
+      # dependabot's inferred "chore(deps)" prefix never reaches a release. "upgrade" is a
+      # visible patch section.
+      prefix: "upgrade"
+      include: "scope"
+    # A release is taken up only after it has been out a week: a version pulled or
+    # superseded within days never reaches a pull request (Semgrep's dependabot-missing-cooldown).
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns:
@@ -16,6 +27,17 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    commit-message:
+      # The pull request title is the squash commit's subject, and release-please releases a
+      # merge by its type: chore and build are hidden, so a dependency bump merged under
+      # dependabot's inferred "chore(deps)" prefix never reaches a release. "upgrade" is a
+      # visible patch section.
+      prefix: "upgrade"
+      include: "scope"
+    # A release is taken up only after it has been out a week: a version pulled or
+    # superseded within days never reaches a pull request (Semgrep's dependabot-missing-cooldown).
+    cooldown:
+      default-days: 7
     groups:
       go-dependencies:
         patterns:
