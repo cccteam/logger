@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.28](https://github.com/cccteam/logger/compare/v0.1.27...v0.1.28) (2026-10-08)
+
+
+### Code Upgrade
+
+* dependabot's pull requests are titled upgrade:, so a dependency bump releases ([#145](https://github.com/cccteam/logger/issues/145)) ([b379923](https://github.com/cccteam/logger/commit/b37992301e00b7aee142793cbb7ec1b44e9ce551))
+
 ## [0.1.27](https://github.com/cccteam/logger/compare/v0.1.26...v0.1.27) (2026-08-18)
 
 
