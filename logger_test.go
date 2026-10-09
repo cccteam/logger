@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	"cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
 	"go.uber.org/mock/gomock"
 )
@@ -161,6 +162,33 @@ func TestLogger_AddRequestAttribute(t *testing.T) {
 			if got := l.AddRequestAttribute(tt.args.key, tt.args.value); got != l {
 				t.Error("Logger.AddRequestAttribute() did not return reference to original Logger (self)")
 			}
+		})
+	}
+}
+
+func TestLogger_SetPolicy(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		policy  Policy
+		prepare func(l *MockctxLogger)
+	}{
+		{
+			name:   "the policy reaches the request's logger",
+			policy: OnEvent().MinSeverity(logging.Warning),
+			prepare: func(l *MockctxLogger) {
+				l.EXPECT().SetPolicy(OnEvent().MinSeverity(logging.Warning)).Times(1)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctxLgr := NewMockctxLogger(gomock.NewController(t))
+			tt.prepare(ctxLgr)
+			l := &Logger{lg: ctxLgr}
+			l.SetPolicy(tt.policy)
 		})
 	}
 }
@@ -326,6 +354,8 @@ func (l *testCtxLogger) Errorf(ctx context.Context, format string, v ...any) {
 }
 
 func (l *testCtxLogger) AddRequestAttribute(_ string, _ any) {}
+
+func (l *testCtxLogger) SetPolicy(_ Policy) {}
 
 func (l *testCtxLogger) WithAttributes() attributer {
 	return &Mockattributer{}

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"cloud.google.com/go/logging"
@@ -22,7 +21,7 @@ type GoogleCloudExporter struct {
 	projectID string
 	client    *logging.Client
 	opts      []logging.LoggerOption
-	logAll    bool
+	policy    Policy
 }
 
 // NewGoogleCloudExporter returns a configured GoogleCloudExporter
@@ -31,14 +30,15 @@ func NewGoogleCloudExporter(client *logging.Client, projectID string, opts ...lo
 		projectID: projectID,
 		client:    client,
 		opts:      opts,
-		logAll:    true,
+		policy:    Always(),
 	}
 }
 
-// LogAll controls if this logger will log all requests, or only requests that contain
-// logs written to the request Logger (default: true)
+// LogAll sets the exporter's default policy: true is Always, the default, and false is OnEvent, which writes a
+// request only when a line attached to it or it failed. A DefaultPolicy option on the request logger overrides
+// this default.
 func (e *GoogleCloudExporter) LogAll(v bool) *GoogleCloudExporter {
-	e.logAll = v
+	e.policy = logAllPolicy(v)
 
 	return e
 }
@@ -51,74 +51,27 @@ func (e *GoogleCloudExporter) Middleware() func(http.Handler) http.Handler {
 			parentLogger: e.client.Logger("request_parent_log", e.opts...),
 			childLogger:  e.client.Logger("request_child_log", e.opts...),
 			projectID:    e.projectID,
-			logAll:       e.logAll,
+			policy:       e.policy,
 		}
 	}
 }
 
 // CliRunner returns a function that executes the given function and creates a top-level parent log.
 func (e *GoogleCloudExporter) CliRunner() func(context.Context, string, func(context.Context) error) error {
-	return func(ctx context.Context, command string, f func(context.Context) error) error {
-		begin := time.Now()
-
-		// generate traceID similarly to how gcpTraceIDFromRequest does it, but purely from context
-		var traceID string
-		if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
-			traceID = sc.TraceID().String()
-		} else {
-			traceID = generateID()
-		}
-		formattedTraceID := fmt.Sprintf("projects/%s/traces/%s", e.projectID, traceID)
-
-		childLogger := e.client.Logger("request_child_log", e.opts...)
-		parentLogger := e.client.Logger("request_parent_log", e.opts...)
-
-		l := newGCPLogger(childLogger, formattedTraceID)
-		ctx = newContext(ctx, l)
-
-		err := f(ctx)
-
-		l.mu.Lock()
-		logCount := l.logCount
-		maxSeverity := l.maxSeverity
-		attributes := make(map[string]any)
-		maps.Copy(attributes, l.reqAttributes)
-		l.mu.Unlock()
-
-		if !e.logAll && logCount == 0 {
-			return err
-		}
-
-		sc := trace.SpanFromContext(ctx).SpanContext()
-		attributes[gcpMessageKey] = fmt.Sprintf("CLI [%s] %s", time.Since(begin), command)
-		attributes["latency"] = time.Since(begin)
-		attributes["command"] = command
-
-		parentLogger.Log(logging.Entry{
-			Timestamp:    begin,
-			Severity:     maxSeverity,
-			Trace:        formattedTraceID,
-			SpanID:       sc.SpanID().String(),
-			TraceSampled: sc.IsSampled(),
-			Payload:      attributes,
-		})
-
-		return err
+	r := &gcpRunner{
+		parentLogger: e.client.Logger("request_parent_log", e.opts...),
+		childLogger:  e.client.Logger("request_child_log", e.opts...),
+		projectID:    e.projectID,
+		policy:       e.policy,
 	}
+
+	return r.run
 }
 
 // DaemonContext returns a context with a logger that writes directly to the parent log, unbuffered.
 func (e *GoogleCloudExporter) DaemonContext(ctx context.Context) context.Context {
-	var traceID string
-	if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
-		traceID = sc.TraceID().String()
-	} else {
-		traceID = generateID()
-	}
-	formattedTraceID := fmt.Sprintf("projects/%s/traces/%s", e.projectID, traceID)
-
 	parentLogger := e.client.Logger("request_parent_log", e.opts...)
-	l := newGCPLogger(parentLogger, formattedTraceID)
+	l := newGCPLogger(parentLogger, gcpTraceIDFromContext(ctx, e.projectID), e.policy)
 
 	return newContext(ctx, l)
 }
@@ -128,37 +81,32 @@ type gcpHandler struct {
 	parentLogger logger
 	childLogger  logger
 	projectID    string
-	logAll       bool
+	policy       Policy
 }
 
 func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	begin := time.Now()
 	traceID := gcpTraceIDFromRequest(r, g.projectID, generateID)
-	l := newGCPLogger(g.childLogger, traceID)
+	l := newGCPLogger(g.childLogger, traceID, g.policy)
 	r = r.WithContext(newContext(r.Context(), l))
 	sw := newResponseRecorder(w)
 
 	g.next.ServeHTTP(sw, r)
 
-	l.mu.Lock()
-	logCount := l.logCount
-	maxSeverity := l.maxSeverity
-	attributes := make(map[string]any)
-	maps.Copy(attributes, l.reqAttributes)
-	l.mu.Unlock()
-
-	if !g.logAll && logCount == 0 {
+	d := l.decide(sw.Status() >= http.StatusBadRequest)
+	if !d.write {
 		return
 	}
 
 	// status code should also set the minimum maxSeverity to Error
+	maxSeverity := d.maxSeverity
 	if sw.Status() > 499 && maxSeverity < logging.Error {
 		maxSeverity = logging.Error
 	}
 
 	sc := trace.SpanFromContext(r.Context()).SpanContext()
 
-	attributes[gcpMessageKey] = parentLogEntry
+	d.attributes[gcpMessageKey] = parentLogEntry
 
 	g.parentLogger.Log(logging.Entry{
 		Timestamp:    begin,
@@ -166,7 +114,7 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Trace:        traceID,
 		SpanID:       sc.SpanID().String(),
 		TraceSampled: sc.IsSampled(),
-		Payload:      attributes,
+		Payload:      d.attributes,
 		HTTPRequest: &logging.HTTPRequest{
 			Request:      r,
 			RequestSize:  requestSize(r.Header.Get("Content-Length")),
@@ -178,6 +126,44 @@ func (g *gcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// gcpRunner runs a command-line function under a parent log entry.
+type gcpRunner struct {
+	parentLogger logger
+	childLogger  logger
+	projectID    string
+	policy       Policy
+}
+
+func (g *gcpRunner) run(ctx context.Context, command string, f func(context.Context) error) error {
+	begin := time.Now()
+	traceID := gcpTraceIDFromContext(ctx, g.projectID)
+	l := newGCPLogger(g.childLogger, traceID, g.policy)
+	ctx = newContext(ctx, l)
+
+	err := f(ctx)
+
+	d := l.decide(err != nil)
+	if !d.write {
+		return err
+	}
+
+	sc := trace.SpanFromContext(ctx).SpanContext()
+	d.attributes[gcpMessageKey] = fmt.Sprintf("CLI [%s] %s", time.Since(begin), command)
+	d.attributes["latency"] = time.Since(begin)
+	d.attributes["command"] = command
+
+	g.parentLogger.Log(logging.Entry{
+		Timestamp:    begin,
+		Severity:     d.maxSeverity,
+		Trace:        traceID,
+		SpanID:       sc.SpanID().String(),
+		TraceSampled: sc.IsSampled(),
+		Payload:      d.attributes,
+	})
+
+	return err
+}
+
 // gcpTraceIDFromRequest formats a trace_id value for GCP Stackdriver
 func gcpTraceIDFromRequest(r *http.Request, projectID string, idgen func() string) string {
 	var traceID string
@@ -187,6 +173,19 @@ func gcpTraceIDFromRequest(r *http.Request, projectID string, idgen func() strin
 		traceID = id
 	} else {
 		traceID = idgen()
+	}
+
+	return fmt.Sprintf("projects/%s/traces/%s", projectID, traceID)
+}
+
+// gcpTraceIDFromContext formats a trace_id value from the span in the context, or from a generated id when the
+// context carries no valid span.
+func gcpTraceIDFromContext(ctx context.Context, projectID string) string {
+	var traceID string
+	if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
+		traceID = sc.TraceID().String()
+	} else {
+		traceID = generateID()
 	}
 
 	return fmt.Sprintf("projects/%s/traces/%s", projectID, traceID)
@@ -216,39 +215,35 @@ type logger interface {
 var _ ctxLogger = (*gcpLogger)(nil)
 
 type gcpLogger struct {
-	root          *gcpLogger
-	logger        logger
-	traceID       string
-	rsvdKeys      []string
-	attributes    map[string]any // attributes for child (trace) logs
-	mu            sync.Mutex
-	maxSeverity   logging.Severity
-	logCount      int
-	reqAttributes map[string]any // attributes for the parent request log
+	record
+	root       *gcpLogger
+	logger     logger
+	traceID    string
+	rsvdKeys   []string
+	attributes map[string]any // attributes for child (trace) logs
 }
 
-func newGCPLogger(lg logger, traceID string) *gcpLogger {
+func newGCPLogger(lg logger, traceID string, policy Policy) *gcpLogger {
 	l := &gcpLogger{
-		logger:        lg,
-		traceID:       traceID,
-		rsvdKeys:      []string{gcpMessageKey},
-		reqAttributes: make(map[string]any),
-		attributes:    make(map[string]any),
+		record:     record{policy: policy, reqAttributes: make(map[string]any)},
+		logger:     lg,
+		traceID:    traceID,
+		rsvdKeys:   []string{gcpMessageKey},
+		attributes: make(map[string]any),
 	}
 	l.root = l // root is self
 
 	return l
 }
 
-// newChild returns a new child gcpLogger
+// newChild returns a new child gcpLogger. The record is only used in the root logger, never the child.
 func (l *gcpLogger) newChild() *gcpLogger {
 	return &gcpLogger{
-		root:          l.root,
-		logger:        l.logger,
-		traceID:       l.traceID,
-		rsvdKeys:      l.rsvdKeys,
-		attributes:    make(map[string]any),
-		reqAttributes: nil, // reqAttributes is only used in the root logger, never the child.
+		root:       l.root,
+		logger:     l.logger,
+		traceID:    l.traceID,
+		rsvdKeys:   l.rsvdKeys,
+		attributes: make(map[string]any),
 	}
 }
 
@@ -300,9 +295,12 @@ func (l *gcpLogger) AddRequestAttribute(key string, value any) {
 		key = customPrefix + key
 	}
 
-	l.root.mu.Lock()
-	defer l.root.mu.Unlock()
-	l.root.reqAttributes[key] = value
+	l.root.addRequestAttribute(key, value)
+}
+
+// SetPolicy replaces the policy of the request or run this logger belongs to.
+func (l *gcpLogger) SetPolicy(p Policy) {
+	l.root.setPolicy(p)
 }
 
 // WithAttributes returns an attributer that can be used to add child (trace) log attributes
@@ -319,12 +317,9 @@ func (l *gcpLogger) TraceID() string {
 }
 
 func (l *gcpLogger) log(ctx context.Context, severity logging.Severity, msg any) {
-	l.root.mu.Lock()
-	if l.root.maxSeverity < severity {
-		l.root.maxSeverity = severity
+	if !l.root.attach(severity) {
+		return
 	}
-	l.root.logCount++
-	l.root.mu.Unlock()
 
 	if err, ok := msg.(error); ok {
 		msg = err.Error()

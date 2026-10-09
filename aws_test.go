@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"cloud.google.com/go/logging"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"go.opentelemetry.io/otel"
@@ -35,7 +36,7 @@ func TestNewAWSExporter(t *testing.T) {
 				logAll: true,
 			},
 			want: &AWSExporter{
-				logAll: true,
+				policy: Always(),
 			},
 		},
 		{
@@ -44,7 +45,7 @@ func TestNewAWSExporter(t *testing.T) {
 				logAll: false,
 			},
 			want: &AWSExporter{
-				logAll: false,
+				policy: OnEvent(),
 			},
 		},
 	}
@@ -53,7 +54,7 @@ func TestNewAWSExporter(t *testing.T) {
 			t.Parallel()
 			got := NewAWSExporter(tt.args.logAll)
 
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(AWSExporter{})); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(AWSExporter{}, Policy{})); diff != "" {
 				t.Errorf("NewAWSExporter() mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -64,7 +65,7 @@ func TestAWSExporter_Middleware(t *testing.T) {
 	t.Parallel()
 
 	type fields struct {
-		logAll bool
+		policy Policy
 	}
 	tests := []struct {
 		name   string
@@ -74,13 +75,13 @@ func TestAWSExporter_Middleware(t *testing.T) {
 		{
 			name: "TestAWSExporter_Middleware",
 			fields: fields{
-				logAll: true,
+				policy: Always(),
 			},
 			want: func(next http.Handler) http.Handler {
 				return &awsHandler{
 					next:   next,
 					logger: slog.New(slog.NewJSONHandler(os.Stdout, nil)).WithGroup("request_parent_log"),
-					logAll: true,
+					policy: Always(),
 				}
 			},
 		},
@@ -90,7 +91,7 @@ func TestAWSExporter_Middleware(t *testing.T) {
 			t.Parallel()
 			next := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
 			e := &AWSExporter{
-				logAll: tt.fields.logAll,
+				policy: tt.fields.policy,
 			}
 
 			got := e.Middleware()(next)
@@ -104,58 +105,148 @@ func TestAWSExporter_Middleware(t *testing.T) {
 func TestAWSExporter_CliRunner(t *testing.T) {
 	t.Parallel()
 
-	type fields struct {
-		logAll bool
-	}
 	tests := []struct {
-		name    string
-		fields  fields
-		command string
-		fn      func(context.Context) error
-		wantErr bool
+		name   string
+		logAll bool
 	}{
 		{
-			name: "call CliRunner",
-			fields: fields{
-				logAll: true,
-			},
-			command: "aws-command --test",
-			fn: func(c context.Context) error {
-				logCtx := FromCtx(c)
-				logCtx.Info("test aws info log")
-				logCtx.AddRequestAttribute("test_aws_key", "test_aws_value")
-				return nil
-			},
-		},
-		{
-			name: "call CliRunner with error",
-			fields: fields{
-				logAll: true,
-			},
-			command: "aws-error-command --test",
-			fn: func(c context.Context) error {
-				logCtx := FromCtx(c)
-				err := fmt.Errorf("aws error occurred")
-				// simulate ignoring the error without explicitly logging it as Error level
-				logCtx.Info(err.Error())
-				return err
-			},
-			wantErr: true,
+			name:   "runner from the exporter",
+			logAll: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := &AWSExporter{
-				logAll: tt.fields.logAll,
+			t.Parallel()
+			if got := NewAWSExporter(tt.logAll).CliRunner(); got == nil {
+				t.Errorf("AWSExporter.CliRunner() returned nil")
 			}
+		})
+	}
+}
 
-			runner := e.CliRunner()
-			ctx := context.Background()
+func Test_awsRunner_run(t *testing.T) {
+	t.Parallel()
 
-			// To properly capture stdout we'd need a pipe, but here we can just test it doesn't panic
-			err := runner(ctx, tt.command, tt.fn)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("AWSExporter.CliRunner() error = %v, wantErr %v", err, tt.wantErr)
+	type args struct {
+		lines    int
+		severity logging.Severity
+		err      error
+		draw     float64
+	}
+	tests := []struct {
+		name       string
+		policy     Policy
+		args       args
+		wantParent bool
+		wantLevel  slog.Level
+		wantCalls  int
+	}{
+		{
+			name:       "always, quiet run",
+			policy:     Always(),
+			wantParent: true,
+			wantLevel:  slog.LevelInfo,
+			wantCalls:  1,
+		},
+		{
+			name:       "always, failed run",
+			policy:     Always(),
+			args:       args{err: errors.New("failed")},
+			wantParent: true,
+			wantLevel:  slog.LevelInfo,
+			wantCalls:  1,
+		},
+		{
+			name:   "on event, quiet run",
+			policy: OnEvent(),
+		},
+		{
+			name:       "on event, a line attached",
+			policy:     OnEvent(),
+			args:       args{lines: 1, severity: logging.Warning},
+			wantParent: true,
+			wantLevel:  slog.LevelWarn,
+			wantCalls:  2,
+		},
+		{
+			name:       "on event, failed run",
+			policy:     OnEvent(),
+			args:       args{err: errors.New("failed")},
+			wantParent: true,
+			wantLevel:  slog.LevelInfo,
+			wantCalls:  1,
+		},
+		{
+			name:       "sampled, the draw hits",
+			policy:     Sampled(0.5),
+			args:       args{draw: 0.25},
+			wantParent: true,
+			wantLevel:  slog.LevelInfo,
+			wantCalls:  1,
+		},
+		{
+			name:   "sampled, the draw misses",
+			policy: Sampled(0.5),
+			args:   args{draw: 0.75},
+		},
+		{
+			name:       "sampled, the draw misses but the run failed",
+			policy:     Sampled(0.5),
+			args:       args{draw: 0.75, err: errors.New("failed")},
+			wantParent: true,
+			wantLevel:  slog.LevelInfo,
+			wantCalls:  1,
+		},
+		{
+			name:      "never, failed run with an error line",
+			policy:    Never(),
+			args:      args{lines: 1, severity: logging.Error, err: errors.New("failed")},
+			wantCalls: 1,
+		},
+		{
+			name:   "floor drops the line, so nothing attached",
+			policy: OnEvent().MinSeverity(logging.Warning),
+			args:   args{lines: 1, severity: logging.Info},
+		},
+		{
+			name:       "floor admits the line",
+			policy:     OnEvent().MinSeverity(logging.Warning),
+			args:       args{lines: 1, severity: logging.Error},
+			wantParent: true,
+			wantLevel:  slog.LevelError,
+			wantCalls:  2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			l := &captureSLogger{}
+			runner := &awsRunner{logger: l, policy: tt.policy}
+			err := runner.run(t.Context(), "aws-command --test", func(ctx context.Context) error {
+				awsLgr, ok := FromCtx(ctx).lg.(*awsLogger)
+				if !ok {
+					t.Fatal("Failed to get awsLogger from context")
+				}
+				awsLgr.draw = func() float64 {
+					return tt.args.draw
+				}
+				FromCtx(ctx).AddRequestAttribute("test_aws_key", "test_aws_value")
+				logLines(ctx, tt.args.lines, tt.args.severity)
+
+				return tt.args.err
+			})
+			if !errors.Is(err, tt.args.err) {
+				t.Errorf("awsRunner.run() error = %v, want %v", err, tt.args.err)
+			}
+			if got := l.msg == parentLogEntry; got != tt.wantParent {
+				t.Fatalf("parent entry written = %v, want %v", got, tt.wantParent)
+			}
+			if l.calls != tt.wantCalls {
+				t.Errorf("calls = %d, want %d", l.calls, tt.wantCalls)
+			}
+			if tt.wantParent && l.level != tt.wantLevel {
+				t.Errorf("Level = %v, want %v", l.level, tt.wantLevel)
 			}
 		})
 	}
@@ -165,75 +256,116 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 	t.Parallel()
 
 	type args struct {
-		status int
-		logs   int
-		level  slog.Level
-	}
-	type fields struct {
-		projectID string
-		logAll    bool
+		status   int
+		lines    int
+		severity logging.Severity
+		draw     float64
 	}
 	tests := []struct {
-		name      string
-		fields    fields
-		args      args
-		wantLevel slog.Level
+		name       string
+		policy     Policy
+		args       args
+		wantParent bool
+		wantLevel  slog.Level
+		wantCalls  int
 	}{
 		{
-			name: "logAll=true",
-			fields: fields{
-				projectID: "my-big-project",
-				logAll:    true,
-			},
-			args: args{
-				status: http.StatusOK,
-				logs:   1,
-				level:  slog.LevelInfo,
-			},
-			wantLevel: slog.LevelInfo,
+			name:       "always, quiet request",
+			policy:     Always(),
+			args:       args{status: http.StatusOK},
+			wantParent: true,
+			wantLevel:  slog.LevelInfo,
+			wantCalls:  1,
 		},
 		{
-			name: "logAll=true no logging",
-			fields: fields{
-				projectID: "my-big-project",
-				logAll:    true,
-			},
-			args: args{
-				status: http.StatusOK,
-			},
-			wantLevel: slog.LevelInfo,
+			name:       "always, a line attached",
+			policy:     Always(),
+			args:       args{status: http.StatusOK, lines: 1, severity: logging.Info},
+			wantParent: true,
+			wantLevel:  slog.LevelInfo,
+			wantCalls:  2,
 		},
 		{
-			name: "logAll=false no logging",
-			fields: fields{
-				projectID: "my-big-project",
-			},
-			args: args{
-				status: http.StatusOK,
-			},
+			name:       "always, a 500 raises the entry to error",
+			policy:     Always(),
+			args:       args{status: http.StatusInternalServerError},
+			wantParent: true,
+			wantLevel:  slog.LevelError,
+			wantCalls:  1,
 		},
 		{
-			name: "logAll=false with logging",
-			fields: fields{
-				projectID: "my-bigger-project",
-			},
-			args: args{
-				status: http.StatusOK,
-				logs:   1,
-				level:  slog.LevelWarn,
-			},
-			wantLevel: slog.LevelWarn,
+			name:   "on event, quiet request",
+			policy: OnEvent(),
+			args:   args{status: http.StatusOK},
 		},
 		{
-			name: "logging for error status",
-			fields: fields{
-				projectID: "my-big-project",
-				logAll:    true,
-			},
-			args: args{
-				status: http.StatusInternalServerError,
-			},
-			wantLevel: slog.LevelError,
+			name:       "on event, a line attached",
+			policy:     OnEvent(),
+			args:       args{status: http.StatusOK, lines: 1, severity: logging.Warning},
+			wantParent: true,
+			wantLevel:  slog.LevelWarn,
+			wantCalls:  2,
+		},
+		{
+			name:       "on event, a 404 is an event",
+			policy:     OnEvent(),
+			args:       args{status: http.StatusNotFound},
+			wantParent: true,
+			wantLevel:  slog.LevelInfo,
+			wantCalls:  1,
+		},
+		{
+			name:       "on event, a 500 is an event, raised to error",
+			policy:     OnEvent(),
+			args:       args{status: http.StatusInternalServerError},
+			wantParent: true,
+			wantLevel:  slog.LevelError,
+			wantCalls:  1,
+		},
+		{
+			name:   "on event, a 304 is not an event",
+			policy: OnEvent(),
+			args:   args{status: http.StatusNotModified},
+		},
+		{
+			name:       "sampled, the draw hits",
+			policy:     Sampled(0.5),
+			args:       args{status: http.StatusOK, draw: 0.25},
+			wantParent: true,
+			wantLevel:  slog.LevelInfo,
+			wantCalls:  1,
+		},
+		{
+			name:   "sampled, the draw misses",
+			policy: Sampled(0.5),
+			args:   args{status: http.StatusOK, draw: 0.75},
+		},
+		{
+			name:       "sampled, the draw misses but the request failed",
+			policy:     Sampled(0.5),
+			args:       args{status: http.StatusBadRequest, draw: 0.75},
+			wantParent: true,
+			wantLevel:  slog.LevelInfo,
+			wantCalls:  1,
+		},
+		{
+			name:      "never, a 500 with an error line",
+			policy:    Never(),
+			args:      args{status: http.StatusInternalServerError, lines: 1, severity: logging.Error},
+			wantCalls: 1,
+		},
+		{
+			name:   "floor drops the line, so nothing attached",
+			policy: OnEvent().MinSeverity(logging.Warning),
+			args:   args{status: http.StatusOK, lines: 1, severity: logging.Info},
+		},
+		{
+			name:       "floor admits the line",
+			policy:     OnEvent().MinSeverity(logging.Warning),
+			args:       args{status: http.StatusOK, lines: 1, severity: logging.Error},
+			wantParent: true,
+			wantLevel:  slog.LevelError,
+			wantCalls:  2,
 		},
 	}
 	for _, tt := range tests {
@@ -245,27 +377,19 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 			l := &captureSLogger{}
 			handler := &awsHandler{
 				logger: l,
-				logAll: tt.fields.logAll,
+				policy: tt.policy,
 				next: http.HandlerFunc(
 					func(w http.ResponseWriter, r *http.Request) {
 						awsLgr, ok := FromReq(r).lg.(*awsLogger)
 						if !ok {
 							t.Fatal("Failed to get awsLogger from request")
 						}
+						awsLgr.draw = func() float64 {
+							return tt.args.draw
+						}
 						awsLgr.reqAttributes["test_req_key_1"] = "test_req_value_1"
 						awsLgr.reqAttributes["test_req_key_2"] = "test_req_value_2"
-
-						for i := 0; i < tt.args.logs; i++ {
-							switch tt.args.level {
-							case slog.LevelInfo:
-								FromReq(r).Info("some log")
-							case slog.LevelWarn:
-								FromReq(r).Warn("some log")
-							case slog.LevelError:
-								FromReq(r).Error("some log")
-							default:
-							}
-						}
+						logLines(r.Context(), tt.args.lines, tt.args.severity)
 
 						w.WriteHeader(tt.args.status)
 						handlerCalled = true
@@ -277,9 +401,15 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 			handler.ServeHTTP(httptest.NewRecorder(), r)
 
 			if !handlerCalled {
-				t.Errorf("Failed to call handler")
+				t.Fatal("Failed to call handler")
 			}
-			if !tt.fields.logAll && tt.args.logs == 0 {
+			if got := l.msg == parentLogEntry; got != tt.wantParent {
+				t.Fatalf("parent entry written = %v, want %v", got, tt.wantParent)
+			}
+			if l.calls != tt.wantCalls {
+				t.Errorf("calls = %d, want %d", l.calls, tt.wantCalls)
+			}
+			if !tt.wantParent {
 				return
 			}
 			if l.level != tt.wantLevel {
@@ -287,10 +417,6 @@ func Test_awsHandler_ServeHTTP(t *testing.T) {
 			}
 			if len(l.attrs) != 13 {
 				t.Errorf("Expected %d request attributes, got %d", 13, len(l.attrs))
-			}
-
-			if l.msg != "Parent Log Entry" {
-				t.Errorf("Message = %v, want %v", l.msg, "Parent Log Entry")
 			}
 		})
 	}
@@ -355,6 +481,7 @@ func Test_newAWSLogger(t *testing.T) {
 	type args struct {
 		logger  awslog
 		traceID string
+		policy  Policy
 	}
 	tests := []struct {
 		name string
@@ -366,14 +493,15 @@ func Test_newAWSLogger(t *testing.T) {
 			args: args{
 				logger:  &testSlogger{},
 				traceID: "1234567890",
+				policy:  OnEvent(),
 			},
 			want: &awsLogger{
-				logger:        &testSlogger{},
-				traceID:       "1234567890",
-				rsvdKeys:      []string{"trace_id", "span_id"},
-				rsvdReqKeys:   []string{"trace_id", "span_id", "http.elapsed", "http.method", "http.url", "http.status_code", "http.response.length", "http.user_agent", "http.remote_ip", "http.scheme", "http.proto"},
-				reqAttributes: map[string]any{},
-				attributes:    map[string]any{},
+				record:      record{policy: OnEvent(), maxSeverity: logging.Info, reqAttributes: map[string]any{}},
+				logger:      &testSlogger{},
+				traceID:     "1234567890",
+				rsvdKeys:    []string{"trace_id", "span_id"},
+				rsvdReqKeys: []string{"trace_id", "span_id", "http.elapsed", "http.method", "http.url", "http.status_code", "http.response.length", "http.user_agent", "http.remote_ip", "http.scheme", "http.proto"},
+				attributes:  map[string]any{},
 			},
 		},
 	}
@@ -381,8 +509,8 @@ func Test_newAWSLogger(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := newAWSLogger(tt.args.logger, tt.args.traceID)
-			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreFields(awsLogger{}, "logger", "mu", "root"), cmp.AllowUnexported(awsLogger{})); diff != "" {
+			got := newAWSLogger(tt.args.logger, tt.args.traceID, tt.args.policy)
+			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreFields(awsLogger{}, "logger", "record.mu", "root"), cmp.AllowUnexported(awsLogger{}, record{}, Policy{})); diff != "" {
 				t.Errorf("newAWSLogger() mismatch (-want +got):\n%s", diff)
 			}
 			if got.root != got {
@@ -553,7 +681,7 @@ func Test_awsLogger_AddRequestAttribute(t *testing.T) {
 			name: "prefix reserved key",
 			fields: fields{
 				root: &awsLogger{
-					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+					record: record{reqAttributes: map[string]any{"test_key_2": "test_value_2"}},
 				},
 				rsvdReqKeys: []string{"test_key 1", "test_key"},
 			},
@@ -567,7 +695,7 @@ func Test_awsLogger_AddRequestAttribute(t *testing.T) {
 			name: "add request attribute (non-reserved key)",
 			fields: fields{
 				root: &awsLogger{
-					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+					record: record{reqAttributes: map[string]any{"test_key_2": "test_value_2"}},
 				},
 				rsvdReqKeys: []string{"test_key 1"},
 			},
@@ -581,7 +709,7 @@ func Test_awsLogger_AddRequestAttribute(t *testing.T) {
 			name: "overwrite request attribute value",
 			fields: fields{
 				root: &awsLogger{
-					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+					record: record{reqAttributes: map[string]any{"test_key_2": "test_value_2"}},
 				},
 				rsvdReqKeys: []string{"test_key 1"},
 			},
@@ -744,14 +872,16 @@ func Test_awsAttributer_Logger(t *testing.T) {
 					root: &awsLogger{
 						traceID: "root trace id",
 					},
-					logger:        &testSlogger{},
-					traceID:       "1234567890",
-					rsvdKeys:      []string{"test reserved key 1", "test reserved key 2"},
-					rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
-					attributes:    map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
-					maxLevel:      slog.LevelWarn,
-					logCount:      2,
-					reqAttributes: map[string]any{"test_req_key_1": "test_req_value_1", "test_req_key_2": "test_req_value_2"},
+					logger:      &testSlogger{},
+					traceID:     "1234567890",
+					rsvdKeys:    []string{"test reserved key 1", "test reserved key 2"},
+					rsvdReqKeys: []string{"test reserved request key 1", "test reserved request key 2"},
+					attributes:  map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+					record: record{
+						maxSeverity:   logging.Warning,
+						logCount:      2,
+						reqAttributes: map[string]any{"test_req_key_1": "test_req_value_1", "test_req_key_2": "test_req_value_2"},
+					},
 				},
 				attributes: map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
 			},
@@ -759,13 +889,10 @@ func Test_awsAttributer_Logger(t *testing.T) {
 				root: &awsLogger{
 					traceID: "root trace id",
 				},
-				traceID:       "1234567890",
-				rsvdKeys:      []string{"test reserved key 1", "test reserved key 2"},
-				rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
-				attributes:    map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
-				maxLevel:      slog.LevelInfo,
-				logCount:      0,
-				reqAttributes: nil,
+				traceID:     "1234567890",
+				rsvdKeys:    []string{"test reserved key 1", "test reserved key 2"},
+				rsvdReqKeys: []string{"test reserved request key 1", "test reserved request key 2"},
+				attributes:  map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
 			},
 		},
 	}
@@ -778,7 +905,7 @@ func Test_awsAttributer_Logger(t *testing.T) {
 			}
 
 			got := a.Logger()
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(awsLogger{}), cmpopts.IgnoreFields(awsLogger{}, "mu", "logger")); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(awsLogger{}, record{}, Policy{}), cmpopts.IgnoreFields(awsLogger{}, "record.mu", "logger")); diff != "" {
 				t.Errorf("awsAttributer.Logger() mismatch (-want +got):\n%s", diff)
 			}
 			gotAwsLogger, ok := got.(*awsLogger)
@@ -806,9 +933,11 @@ type captureSLogger struct {
 	level slog.Level
 	msg   string
 	attrs []slog.Attr
+	calls int
 }
 
 func (c *captureSLogger) LogAttrs(ctx context.Context, level slog.Level, msg string, attrs ...slog.Attr) {
+	c.calls++
 	c.ctx = ctx
 	c.level = level
 	c.msg = msg

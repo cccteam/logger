@@ -62,6 +62,9 @@ func (l *stdErrLogger) Errorf(_ context.Context, format string, v ...any) {
 // For this std logger, there is no parent request log, so this is a no-op
 func (l *stdErrLogger) AddRequestAttribute(_ string, _ any) {}
 
+// SetPolicy does nothing: the std logger belongs to no request or run, so there is no parent entry to decide
+func (l *stdErrLogger) SetPolicy(_ Policy) {}
+
 // WithAttributes returns an attributer that can be used to add child (trace) log attributes
 func (l *stdErrLogger) WithAttributes() attributer {
 	attrs := make(map[string]any)

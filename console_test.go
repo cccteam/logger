@@ -3,9 +3,9 @@ package logger
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -135,17 +135,17 @@ func TestConsoleExporter_Middleware(t *testing.T) {
 }
 
 func TestConsoleExporter_CliRunner(t *testing.T) {
-	t.Parallel()
-
 	type fields struct {
 		noColor bool
 	}
 	tests := []struct {
 		name         string
 		fields       fields
+		opts         []RequestLoggerOption
 		command      string
 		fn           func(context.Context) error
 		wantContains []string
+		wantAbsent   []string
 		wantErr      bool
 	}{
 		{
@@ -158,6 +158,7 @@ func TestConsoleExporter_CliRunner(t *testing.T) {
 				logCtx := FromCtx(c)
 				logCtx.Info("test info log")
 				logCtx.AddRequestAttribute("test_key", "test_value")
+
 				return nil
 			},
 			wantContains: []string{
@@ -174,9 +175,10 @@ func TestConsoleExporter_CliRunner(t *testing.T) {
 			command: "my-error-command --flag",
 			fn: func(c context.Context) error {
 				logCtx := FromCtx(c)
-				err := fmt.Errorf("an error occurred")
+				err := errors.New("an error occurred")
 				// simulate ignoring the error without explicitly logging it as Error level
 				logCtx.Info(err.Error())
+
 				return err
 			},
 			wantContains: []string{
@@ -185,18 +187,101 @@ func TestConsoleExporter_CliRunner(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "on event, a quiet run writes no parent entry",
+			fields: fields{
+				noColor: true,
+			},
+			opts:    []RequestLoggerOption{DefaultPolicy(OnEvent())},
+			command: "my-quiet-command",
+			fn: func(_ context.Context) error {
+				return nil
+			},
+			wantAbsent: []string{"my-quiet-command"},
+		},
+		{
+			name: "on event, a line attached writes the parent entry",
+			fields: fields{
+				noColor: true,
+			},
+			opts:    []RequestLoggerOption{DefaultPolicy(OnEvent())},
+			command: "my-chatty-command",
+			fn: func(c context.Context) error {
+				FromCtx(c).Warn("something to say")
+
+				return nil
+			},
+			wantContains: []string{
+				"WARN : something to say",
+				"WARN : CLI [",
+				"] my-chatty-command logCount=1",
+			},
+		},
+		{
+			name: "on event, a failed run writes the parent entry",
+			fields: fields{
+				noColor: true,
+			},
+			opts:    []RequestLoggerOption{DefaultPolicy(OnEvent())},
+			command: "my-failing-command",
+			fn: func(_ context.Context) error {
+				return errors.New("failed")
+			},
+			wantContains: []string{
+				"INFO : CLI [",
+				"] my-failing-command logCount=0",
+			},
+			wantErr: true,
+		},
+		{
+			name: "never writes nothing, even on a failed run with a line",
+			fields: fields{
+				noColor: true,
+			},
+			opts:    []RequestLoggerOption{DefaultPolicy(Never())},
+			command: "my-silent-command",
+			fn: func(c context.Context) error {
+				FromCtx(c).Error("loud but unwritten as a parent")
+
+				return errors.New("failed")
+			},
+			wantContains: []string{"ERROR: loud but unwritten as a parent"},
+			wantAbsent:   []string{"my-silent-command"},
+			wantErr:      true,
+		},
+		{
+			name: "the floor drops a line below it",
+			fields: fields{
+				noColor: true,
+			},
+			opts:    []RequestLoggerOption{DefaultPolicy(Always().MinSeverity(logging.Warning))},
+			command: "my-filtered-command",
+			fn: func(c context.Context) error {
+				FromCtx(c).Info("dropped")
+				FromCtx(c).Error("kept")
+
+				return nil
+			},
+			wantContains: []string{
+				"ERROR: kept",
+				"] my-filtered-command logCount=1",
+			},
+			wantAbsent: []string{"dropped"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			log.SetOutput(&buf)
-			t.Cleanup(func() { log.SetOutput(os.Stderr) })
+			t.Cleanup(func() {
+				log.SetOutput(os.Stderr)
+			})
 
 			e := &ConsoleExporter{
 				noColor: tt.fields.noColor,
 			}
 
-			runner := e.CliRunner()
+			runner := NewCliLogger(e, tt.opts...)
 			ctx := context.Background()
 
 			err := runner(ctx, tt.command, tt.fn)
@@ -210,80 +295,125 @@ func TestConsoleExporter_CliRunner(t *testing.T) {
 					t.Errorf("Missing %q in output: %v", want, output)
 				}
 			}
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(output, absent) {
+					t.Errorf("Unexpected %q in output: %v", absent, output)
+				}
+			}
 		})
 	}
 }
 
 func Test_consoleHandler_ServeHTTP(t *testing.T) {
-	t.Parallel()
-
 	type args struct {
-		status int
-		level  slog.Level
+		status   int
+		lines    int
+		severity logging.Severity
+		draw     float64
 	}
 	tests := []struct {
-		name            string
-		args            args
-		wantMaxSeverity logging.Severity
+		name       string
+		policy     Policy
+		args       args
+		wantParent string // how the parent line starts, after the log package's time prefix; empty when none is expected
+		wantLines  int
 	}{
 		{
-			name: "info logging",
-			args: args{
-				status: http.StatusOK,
-				level:  slog.LevelInfo,
-			},
-			wantMaxSeverity: logging.Info,
+			name:       "always, quiet request",
+			policy:     Always(),
+			args:       args{status: http.StatusOK},
+			wantParent: "INFO : GET / 200",
 		},
 		{
-			name: "warning logging",
-			args: args{
-				status: http.StatusOK,
-				level:  slog.LevelWarn,
-			},
-			wantMaxSeverity: logging.Warning,
+			name:       "always, a line attached",
+			policy:     Always(),
+			args:       args{status: http.StatusOK, lines: 1, severity: logging.Warning},
+			wantParent: "WARN : GET / 200",
+			wantLines:  1,
 		},
 		{
-			name: "error logging",
-			args: args{
-				status: http.StatusOK,
-				level:  slog.LevelError,
-			},
-			wantMaxSeverity: logging.Error,
+			name:       "always, a 500 raises the entry to error",
+			policy:     Always(),
+			args:       args{status: http.StatusInternalServerError},
+			wantParent: "ERROR: GET / 500",
 		},
 		{
-			name: "logging for error status",
-			args: args{
-				status: http.StatusInternalServerError,
-			},
-			wantMaxSeverity: logging.Error,
+			name:   "on event, quiet request",
+			policy: OnEvent(),
+			args:   args{status: http.StatusOK},
+		},
+		{
+			name:       "on event, a line attached",
+			policy:     OnEvent(),
+			args:       args{status: http.StatusOK, lines: 1, severity: logging.Info},
+			wantParent: "INFO : GET / 200",
+			wantLines:  1,
+		},
+		{
+			name:       "on event, a 404 is an event",
+			policy:     OnEvent(),
+			args:       args{status: http.StatusNotFound},
+			wantParent: "INFO : GET / 404",
+		},
+		{
+			name:       "on event, a 500 is an event, raised to error",
+			policy:     OnEvent(),
+			args:       args{status: http.StatusInternalServerError},
+			wantParent: "ERROR: GET / 500",
+		},
+		{
+			name:       "sampled, the draw hits",
+			policy:     Sampled(0.5),
+			args:       args{status: http.StatusOK, draw: 0.25},
+			wantParent: "INFO : GET / 200",
+		},
+		{
+			name:   "sampled, the draw misses",
+			policy: Sampled(0.5),
+			args:   args{status: http.StatusOK, draw: 0.75},
+		},
+		{
+			name:      "never, a 500 with an error line",
+			policy:    Never(),
+			args:      args{status: http.StatusInternalServerError, lines: 1, severity: logging.Error},
+			wantLines: 1,
+		},
+		{
+			name:   "floor drops the line, so nothing attached",
+			policy: OnEvent().MinSeverity(logging.Warning),
+			args:   args{status: http.StatusOK, lines: 1, severity: logging.Info},
+		},
+		{
+			name:       "floor admits the line",
+			policy:     OnEvent().MinSeverity(logging.Warning),
+			args:       args{status: http.StatusOK, lines: 1, severity: logging.Error},
+			wantParent: "ERROR: GET / 200",
+			wantLines:  1,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+			var buf bytes.Buffer
+			log.SetOutput(&buf)
+			t.Cleanup(func() {
+				log.SetOutput(os.Stderr)
+			})
 
 			var handlerCalled bool
-			var l *consoleLogger
 			handler := &consoleHandler{
+				noColor: true,
 				next: http.HandlerFunc(
 					func(w http.ResponseWriter, r *http.Request) {
-						switch tt.args.level {
-						case slog.LevelInfo:
-							FromReq(r).Info("some log")
-						case slog.LevelWarn:
-							FromReq(r).Warn("some log")
-						case slog.LevelError:
-							FromReq(r).Error("some log")
-						default:
-						}
-
-						var ok bool
-						l, ok = FromReq(r).lg.(*consoleLogger)
+						l, ok := FromReq(r).lg.(*consoleLogger)
 						if !ok {
 							t.Fatal("Failed to get consoleLogger from request")
 						}
+						l.SetPolicy(tt.policy)
+						l.draw = func() float64 {
+							return tt.args.draw
+						}
 						l.reqAttributes["test_key_1"] = "test_value_1"
-						l.reqAttributes["test_key_2"] = "test_value_2"
+						logLines(r.Context(), tt.args.lines, tt.args.severity)
 
 						w.WriteHeader(tt.args.status)
 						handlerCalled = true
@@ -296,14 +426,30 @@ func Test_consoleHandler_ServeHTTP(t *testing.T) {
 			handler.ServeHTTP(w, r)
 
 			if !handlerCalled {
-				t.Errorf("Failed to call handler")
+				t.Fatal("Failed to call handler")
 			}
-			if l.maxSeverity != tt.wantMaxSeverity {
-				t.Errorf("Level = %v, want %v", l.maxSeverity, tt.wantMaxSeverity)
+
+			var parent string
+			var lines int
+			for _, line := range strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n") {
+				if line == "" {
+					continue
+				}
+				line = line[20:] // the log package's date and time
+				if strings.Contains(line, cslLogCount+"=") {
+					parent = line
+				} else {
+					lines++
+				}
 			}
-			wantAttrs := map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"}
-			if cmp.Diff(l.reqAttributes, wantAttrs) != "" {
-				t.Errorf("Attributes mismatch (-want +got):\n%s", cmp.Diff(l.reqAttributes, wantAttrs))
+			if (parent != "") != (tt.wantParent != "") || !strings.HasPrefix(parent, tt.wantParent) {
+				t.Errorf("parent line = %q, want one starting %q", parent, tt.wantParent)
+			}
+			if parent != "" && !strings.Contains(parent, "test_key_1=test_value_1") {
+				t.Errorf("parent line = %q, missing the request attribute", parent)
+			}
+			if lines != tt.wantLines {
+				t.Errorf("child lines = %d, want %d", lines, tt.wantLines)
 			}
 		})
 	}
@@ -328,12 +474,11 @@ func TestNewConsoleLogger(t *testing.T) {
 				noColor: true,
 			},
 			want: &consoleLogger{
-				r:             &http.Request{},
-				noColor:       true,
-				maxSeverity:   logging.Info,
-				rsvdReqKeys:   []string{"requestSize", "responseSize", "logCount"},
-				reqAttributes: map[string]any{},
-				attributes:    map[string]any{},
+				record:      record{policy: Always(), maxSeverity: logging.Info, reqAttributes: map[string]any{}},
+				r:           &http.Request{},
+				noColor:     true,
+				rsvdReqKeys: []string{"requestSize", "responseSize", "logCount"},
+				attributes:  map[string]any{},
 			},
 		},
 	}
@@ -341,7 +486,7 @@ func TestNewConsoleLogger(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := newConsoleLogger(tt.args.r, tt.args.noColor)
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(consoleLogger{}), cmpopts.IgnoreFields(consoleLogger{}, "r", "mu", "root")); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(consoleLogger{}, record{}, Policy{}), cmpopts.IgnoreFields(consoleLogger{}, "r", "record.mu", "root")); diff != "" {
 				t.Errorf("NewConsoleLogger() mismatch (-want +got):\n%s", diff)
 			}
 			if got.root != got {
@@ -474,7 +619,7 @@ func Test_consoleLogger_AddRequestAttribute(t *testing.T) {
 			name: "prefix reserved key with 'custom_'",
 			fields: fields{
 				root: &consoleLogger{
-					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+					record: record{reqAttributes: map[string]any{"test_key_2": "test_value_2"}},
 				},
 				rsvdReqKeys: []string{"test_key 1", "test_key"},
 			},
@@ -488,7 +633,7 @@ func Test_consoleLogger_AddRequestAttribute(t *testing.T) {
 			name: "add request attribute (non-reserved key)",
 			fields: fields{
 				root: &consoleLogger{
-					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+					record: record{reqAttributes: map[string]any{"test_key_2": "test_value_2"}},
 				},
 				rsvdReqKeys: []string{"test_key 1"},
 			},
@@ -502,7 +647,7 @@ func Test_consoleLogger_AddRequestAttribute(t *testing.T) {
 			name: "overwrite request attribute value",
 			fields: fields{
 				root: &consoleLogger{
-					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+					record: record{reqAttributes: map[string]any{"test_key_2": "test_value_2"}},
 				},
 				rsvdReqKeys: []string{"test_key 1"},
 			},
@@ -642,28 +787,27 @@ func Test_consoleAttributer_Logger(t *testing.T) {
 			fields: fields{
 				logger: &consoleLogger{
 					root: &consoleLogger{
-						logCount: 123,
+						record: record{logCount: 123},
 					},
-					r:             httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/test/url", http.NoBody),
-					noColor:       true,
-					rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
-					attributes:    map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
-					maxSeverity:   logging.Warning,
-					logCount:      456,
-					reqAttributes: map[string]any{"test_req_key_1": "test_req_value_1", "test_req_key_2": "test_req_value_2"},
+					r:           httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/test/url", http.NoBody),
+					noColor:     true,
+					rsvdReqKeys: []string{"test reserved request key 1", "test reserved request key 2"},
+					attributes:  map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+					record: record{
+						maxSeverity:   logging.Warning,
+						logCount:      456,
+						reqAttributes: map[string]any{"test_req_key_1": "test_req_value_1", "test_req_key_2": "test_req_value_2"},
+					},
 				},
 				attributes: map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
 			},
 			want: &consoleLogger{
 				root: &consoleLogger{
-					logCount: 123,
+					record: record{logCount: 123},
 				},
-				noColor:       true,
-				rsvdReqKeys:   []string{"test reserved request key 1", "test reserved request key 2"},
-				attributes:    map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
-				maxSeverity:   logging.Debug,
-				logCount:      0,
-				reqAttributes: nil,
+				noColor:     true,
+				rsvdReqKeys: []string{"test reserved request key 1", "test reserved request key 2"},
+				attributes:  map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
 			},
 		},
 	}
@@ -676,7 +820,7 @@ func Test_consoleAttributer_Logger(t *testing.T) {
 			}
 
 			got := a.Logger()
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(consoleLogger{}), cmpopts.IgnoreFields(consoleLogger{}, "mu", "r")); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(consoleLogger{}, record{}, Policy{}), cmpopts.IgnoreFields(consoleLogger{}, "record.mu", "r")); diff != "" {
 				t.Errorf("consoleAttributer.Logger() mismatch (-want +got):\n%s", diff)
 			}
 			gotConsoleLogger, ok := got.(*consoleLogger)

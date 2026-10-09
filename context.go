@@ -63,6 +63,9 @@ type ctxLogger interface {
 	// If the key already exists, its value is overwritten
 	AddRequestAttribute(key string, value any)
 
+	// SetPolicy replaces the Policy of the request or run the logger belongs to
+	SetPolicy(p Policy)
+
 	// WithAttributes returns an attributer that can be used to add child (trace) log attributes
 	WithAttributes() attributer
 

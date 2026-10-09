@@ -45,7 +45,7 @@ func TestNewGoogleCloudExporter(t *testing.T) {
 				projectID: "My Project ID",
 				client:    &logging.Client{},
 				opts:      []logging.LoggerOption{logging.ConcurrentWriteLimit(5)},
-				logAll:    true,
+				policy:    Always(),
 			},
 		},
 	}
@@ -53,7 +53,7 @@ func TestNewGoogleCloudExporter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := NewGoogleCloudExporter(tt.args.client, tt.args.projectID, tt.args.opts...)
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(GoogleCloudExporter{}, logging.Client{}), cmpopts.IgnoreFields(logging.Client{}, "client", "loggers", "mu")); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(GoogleCloudExporter{}, Policy{}, logging.Client{}), cmpopts.IgnoreFields(logging.Client{}, "client", "loggers", "mu")); diff != "" {
 				t.Errorf("NewGoogleCloudExporter() mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -63,7 +63,7 @@ func TestNewGoogleCloudExporter(t *testing.T) {
 func TestGoogleCloudExporter_LogAll(t *testing.T) {
 	t.Parallel()
 	type fields struct {
-		logAll bool
+		policy Policy
 	}
 	type args struct {
 		v bool
@@ -75,24 +75,27 @@ func TestGoogleCloudExporter_LogAll(t *testing.T) {
 		want   *GoogleCloudExporter
 	}{
 		{
-			name: "logAll=true",
+			name: "logAll=true is the always policy",
+			fields: fields{
+				policy: OnEvent(),
+			},
 			args: args{
 				v: true,
 			},
 			want: &GoogleCloudExporter{
-				logAll: true,
+				policy: Always(),
 			},
 		},
 		{
-			name: "logAll=false",
+			name: "logAll=false is the on event policy",
 			fields: fields{
-				logAll: true,
+				policy: Always(),
 			},
 			args: args{
 				v: false,
 			},
 			want: &GoogleCloudExporter{
-				logAll: false,
+				policy: OnEvent(),
 			},
 		},
 	}
@@ -100,10 +103,10 @@ func TestGoogleCloudExporter_LogAll(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			e := &GoogleCloudExporter{
-				logAll: tt.fields.logAll,
+				policy: tt.fields.policy,
 			}
 			got := e.LogAll(tt.args.v)
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(GoogleCloudExporter{})); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(GoogleCloudExporter{}, Policy{})); diff != "" {
 				t.Errorf("GoogleCloudExporter.LogAll() mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -117,7 +120,7 @@ func TestGoogleCloudExporter_Middleware(t *testing.T) {
 		projectID string
 		client    *logging.Client
 		opts      []logging.LoggerOption
-		logAll    bool
+		policy    Policy
 	}
 	tests := []struct {
 		name   string
@@ -130,7 +133,7 @@ func TestGoogleCloudExporter_Middleware(t *testing.T) {
 				projectID: "My other project",
 				client:    &logging.Client{},
 				opts:      []logging.LoggerOption{logging.ConcurrentWriteLimit(5)},
-				logAll:    true,
+				policy:    OnEvent(),
 			},
 			want: func(next http.Handler) http.Handler {
 				client := &logging.Client{}
@@ -141,7 +144,7 @@ func TestGoogleCloudExporter_Middleware(t *testing.T) {
 					parentLogger: client.Logger("request_parent_log", opts...),
 					childLogger:  client.Logger("request_child_log", opts...),
 					projectID:    "My other project",
-					logAll:       true,
+					policy:       OnEvent(),
 				}
 			},
 		},
@@ -153,7 +156,7 @@ func TestGoogleCloudExporter_Middleware(t *testing.T) {
 				projectID: tt.fields.projectID,
 				client:    tt.fields.client,
 				opts:      tt.fields.opts,
-				logAll:    tt.fields.logAll,
+				policy:    tt.fields.policy,
 			}
 			got := e.Middleware()(next)
 			if diff := deep.Equal(got, tt.want(next)); diff != nil {
@@ -169,46 +172,17 @@ func TestGoogleCloudExporter_CliRunner(t *testing.T) {
 	type fields struct {
 		projectID string
 		client    *logging.Client
-		logAll    bool
 	}
 	tests := []struct {
-		name    string
-		fields  fields
-		command string
-		fn      func(context.Context) error
-		wantErr bool
+		name   string
+		fields fields
 	}{
 		{
-			name: "call CliRunner",
+			name: "runner from the exporter",
 			fields: fields{
 				projectID: "My project",
 				client:    &logging.Client{},
-				logAll:    false,
 			},
-			command: "gcp-command --flag",
-			fn: func(c context.Context) error {
-				logCtx := FromCtx(c)
-				// don't log to prevent actual network calls from failing during tests with an empty unauthenticated client
-				logCtx.AddRequestAttribute("test_gcp_key", "test_gcp_value")
-				return nil
-			},
-		},
-		{
-			name: "call CliRunner with error",
-			fields: fields{
-				projectID: "My project",
-				client:    &logging.Client{},
-				logAll:    false,
-			},
-			command: "gcp-error-command --flag",
-			fn: func(c context.Context) error {
-				logCtx := FromCtx(c)
-				err := fmt.Errorf("gcp error occurred")
-				// don't explicitly elevate to error severity
-				logCtx.AddRequestAttribute("test_gcp_key", "test_gcp_value")
-				return err
-			},
-			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -216,17 +190,137 @@ func TestGoogleCloudExporter_CliRunner(t *testing.T) {
 			e := &GoogleCloudExporter{
 				projectID: tt.fields.projectID,
 				client:    tt.fields.client,
-				logAll:    tt.fields.logAll,
 			}
+			if got := e.CliRunner(); got == nil {
+				t.Errorf("GoogleCloudExporter.CliRunner() returned nil")
+			}
+		})
+	}
+}
 
-			runner := e.CliRunner()
-			ctx := context.Background()
+func Test_gcpRunner_run(t *testing.T) {
+	t.Parallel()
 
-			// The client is unauthenticated so writing the logs may fail/hang or output to stderr,
-			// but we're mostly testing that it doesn't panic and behaves like other middleware
-			err := runner(ctx, tt.command, tt.fn)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GoogleCloudExporter.CliRunner() error = %v, wantErr %v", err, tt.wantErr)
+	type args struct {
+		lines    int
+		severity logging.Severity
+		err      error
+		draw     float64
+	}
+	tests := []struct {
+		name         string
+		policy       Policy
+		args         args
+		wantParent   bool
+		wantSeverity logging.Severity
+		wantChildren int
+	}{
+		{
+			name:       "always, quiet run",
+			policy:     Always(),
+			wantParent: true,
+		},
+		{
+			name:       "always, failed run",
+			policy:     Always(),
+			args:       args{err: errors.New("failed")},
+			wantParent: true,
+		},
+		{
+			name:   "on event, quiet run",
+			policy: OnEvent(),
+		},
+		{
+			name:         "on event, a line attached",
+			policy:       OnEvent(),
+			args:         args{lines: 1, severity: logging.Warning},
+			wantParent:   true,
+			wantSeverity: logging.Warning,
+			wantChildren: 1,
+		},
+		{
+			name:       "on event, failed run",
+			policy:     OnEvent(),
+			args:       args{err: errors.New("failed")},
+			wantParent: true,
+		},
+		{
+			name:       "sampled, the draw hits",
+			policy:     Sampled(0.5),
+			args:       args{draw: 0.25},
+			wantParent: true,
+		},
+		{
+			name:   "sampled, the draw misses",
+			policy: Sampled(0.5),
+			args:   args{draw: 0.75},
+		},
+		{
+			name:       "sampled, the draw misses but the run failed",
+			policy:     Sampled(0.5),
+			args:       args{draw: 0.75, err: errors.New("failed")},
+			wantParent: true,
+		},
+		{
+			name:         "never, failed run with an error line",
+			policy:       Never(),
+			args:         args{lines: 1, severity: logging.Error, err: errors.New("failed")},
+			wantChildren: 1,
+		},
+		{
+			name:   "floor drops the line, so nothing attached",
+			policy: OnEvent().MinSeverity(logging.Warning),
+			args:   args{lines: 1, severity: logging.Info},
+		},
+		{
+			name:         "floor admits the line",
+			policy:       OnEvent().MinSeverity(logging.Warning),
+			args:         args{lines: 1, severity: logging.Error},
+			wantParent:   true,
+			wantSeverity: logging.Error,
+			wantChildren: 1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			parent, child := &captureLogger{}, &captureLogger{}
+			runner := &gcpRunner{parentLogger: parent, childLogger: child, projectID: "my-project", policy: tt.policy}
+			err := runner.run(t.Context(), "gcp-command --flag", func(ctx context.Context) error {
+				gcpLgr, ok := FromCtx(ctx).lg.(*gcpLogger)
+				if !ok {
+					t.Fatal("Failed to get gcpLogger from context")
+				}
+				gcpLgr.draw = func() float64 {
+					return tt.args.draw
+				}
+				FromCtx(ctx).AddRequestAttribute("test_gcp_key", "test_gcp_value")
+				logLines(ctx, tt.args.lines, tt.args.severity)
+
+				return tt.args.err
+			})
+			if !errors.Is(err, tt.args.err) {
+				t.Errorf("gcpRunner.run() error = %v, want %v", err, tt.args.err)
+			}
+			if got := parent.calls == 1; got != tt.wantParent {
+				t.Fatalf("parent entry written = %v, want %v", got, tt.wantParent)
+			}
+			if child.calls != tt.wantChildren {
+				t.Errorf("child entries = %d, want %d", child.calls, tt.wantChildren)
+			}
+			if !tt.wantParent {
+				return
+			}
+			if parent.e.Severity != tt.wantSeverity {
+				t.Errorf("Severity = %v, want %v", parent.e.Severity, tt.wantSeverity)
+			}
+			pl, ok := parent.e.Payload.(map[string]any)
+			if !ok {
+				t.Fatalf("Payload type %T, want map[string]any", parent.e.Payload)
+			}
+			if pl["command"] != "gcp-command --flag" || pl["test_gcp_key"] != "test_gcp_value" {
+				t.Errorf("Payload = %v, missing the command or the request attribute", pl)
 			}
 		})
 	}
@@ -236,75 +330,106 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 	t.Parallel()
 
 	type args struct {
-		status int
-		logs   int
-		level  logging.Severity
-	}
-	type fields struct {
-		projectID string
-		logAll    bool
+		status   int
+		lines    int
+		severity logging.Severity
+		draw     float64
 	}
 	tests := []struct {
-		name      string
-		fields    fields
-		args      args
-		wantLevel logging.Severity
+		name         string
+		policy       Policy
+		args         args
+		wantParent   bool
+		wantSeverity logging.Severity
+		wantChildren int
 	}{
 		{
-			name: "logAll=true",
-			fields: fields{
-				projectID: "my-big-project",
-				logAll:    true,
-			},
-			args: args{
-				status: http.StatusOK,
-				logs:   1,
-				level:  logging.Info,
-			},
-			wantLevel: logging.Info,
+			name:       "always, quiet request",
+			policy:     Always(),
+			args:       args{status: http.StatusOK},
+			wantParent: true,
 		},
 		{
-			name: "logAll=true no logging",
-			fields: fields{
-				projectID: "my-big-project",
-				logAll:    true,
-			},
-			args: args{
-				status: http.StatusOK,
-			},
-			wantLevel: logging.Default,
+			name:         "always, a line attached",
+			policy:       Always(),
+			args:         args{status: http.StatusOK, lines: 1, severity: logging.Info},
+			wantParent:   true,
+			wantSeverity: logging.Info,
+			wantChildren: 1,
 		},
 		{
-			name: "logAll=false no logging",
-			fields: fields{
-				projectID: "my-big-project",
-			},
-			args: args{
-				status: http.StatusOK,
-			},
+			name:         "always, a 500 raises the entry to error",
+			policy:       Always(),
+			args:         args{status: http.StatusInternalServerError},
+			wantParent:   true,
+			wantSeverity: logging.Error,
 		},
 		{
-			name: "logAll=false with logging",
-			fields: fields{
-				projectID: "my-bigger-project",
-			},
-			args: args{
-				status: http.StatusOK,
-				logs:   1,
-				level:  logging.Warning,
-			},
-			wantLevel: logging.Warning,
+			name:   "on event, quiet request",
+			policy: OnEvent(),
+			args:   args{status: http.StatusOK},
 		},
 		{
-			name: "logging for error status",
-			fields: fields{
-				projectID: "my-big-project",
-				logAll:    true,
-			},
-			args: args{
-				status: http.StatusInternalServerError,
-			},
-			wantLevel: logging.Error,
+			name:         "on event, a line attached",
+			policy:       OnEvent(),
+			args:         args{status: http.StatusOK, lines: 1, severity: logging.Warning},
+			wantParent:   true,
+			wantSeverity: logging.Warning,
+			wantChildren: 1,
+		},
+		{
+			name:       "on event, a 404 is an event",
+			policy:     OnEvent(),
+			args:       args{status: http.StatusNotFound},
+			wantParent: true,
+		},
+		{
+			name:         "on event, a 500 is an event, raised to error",
+			policy:       OnEvent(),
+			args:         args{status: http.StatusInternalServerError},
+			wantParent:   true,
+			wantSeverity: logging.Error,
+		},
+		{
+			name:   "on event, a 304 is not an event",
+			policy: OnEvent(),
+			args:   args{status: http.StatusNotModified},
+		},
+		{
+			name:       "sampled, the draw hits",
+			policy:     Sampled(0.5),
+			args:       args{status: http.StatusOK, draw: 0.25},
+			wantParent: true,
+		},
+		{
+			name:   "sampled, the draw misses",
+			policy: Sampled(0.5),
+			args:   args{status: http.StatusOK, draw: 0.75},
+		},
+		{
+			name:       "sampled, the draw misses but the request failed",
+			policy:     Sampled(0.5),
+			args:       args{status: http.StatusBadRequest, draw: 0.75},
+			wantParent: true,
+		},
+		{
+			name:         "never, a 500 with an error line",
+			policy:       Never(),
+			args:         args{status: http.StatusInternalServerError, lines: 1, severity: logging.Error},
+			wantChildren: 1,
+		},
+		{
+			name:   "floor drops the line, so nothing attached",
+			policy: OnEvent().MinSeverity(logging.Warning),
+			args:   args{status: http.StatusOK, lines: 1, severity: logging.Info},
+		},
+		{
+			name:         "floor admits the line",
+			policy:       OnEvent().MinSeverity(logging.Warning),
+			args:         args{status: http.StatusOK, lines: 1, severity: logging.Error},
+			wantParent:   true,
+			wantSeverity: logging.Error,
+			wantChildren: 1,
 		},
 	}
 	for _, tt := range tests {
@@ -313,33 +438,25 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 
 			var handlerCalled bool
 			var traceID string
-			l := &captureLogger{}
+			parent, child := &captureLogger{}, &captureLogger{}
 			handler := &gcpHandler{
-				parentLogger: l,
-				childLogger:  &captureLogger{},
-				projectID:    tt.fields.projectID,
-				logAll:       tt.fields.logAll,
+				parentLogger: parent,
+				childLogger:  child,
+				projectID:    "my-big-project",
+				policy:       tt.policy,
 				next: http.HandlerFunc(
 					func(w http.ResponseWriter, r *http.Request) {
-						for i := 0; i < tt.args.logs; i++ {
-							switch tt.args.level {
-							case logging.Info:
-								FromReq(r).Info("some log")
-							case logging.Warning:
-								FromReq(r).Warn("some log")
-							case logging.Error:
-								FromReq(r).Error("some log")
-							default:
-							}
-						}
-
 						gcpLgr, ok := FromReq(r).lg.(*gcpLogger)
 						if !ok {
 							t.Fatalf("Req() = %v, wanted: %T", gcpLgr, &gcpLogger{})
 						}
+						gcpLgr.draw = func() float64 {
+							return tt.args.draw
+						}
 						traceID = gcpLgr.traceID
 						gcpLgr.reqAttributes["test_key_1"] = "test_value_1"
 						gcpLgr.reqAttributes["test_key_2"] = "test_value_2"
+						logLines(r.Context(), tt.args.lines, tt.args.severity)
 
 						w.WriteHeader(tt.args.status)
 						handlerCalled = true
@@ -352,16 +469,22 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 			handler.ServeHTTP(w, r)
 
 			if !handlerCalled {
-				t.Errorf("Failed to call handler")
+				t.Fatal("Failed to call handler")
 			}
-			if !tt.fields.logAll && tt.args.logs == 0 {
+			if got := parent.calls == 1; got != tt.wantParent {
+				t.Fatalf("parent entry written = %v, want %v", got, tt.wantParent)
+			}
+			if child.calls != tt.wantChildren {
+				t.Errorf("child entries = %d, want %d", child.calls, tt.wantChildren)
+			}
+			if !tt.wantParent {
 				return
 			}
-			if l.e.Severity != tt.wantLevel {
-				t.Errorf("Severity = %v, want %v", l.e.Severity, tt.wantLevel)
+			if parent.e.Severity != tt.wantSeverity {
+				t.Errorf("Severity = %v, want %v", parent.e.Severity, tt.wantSeverity)
 			}
-			if l.e.Trace != traceID {
-				t.Errorf("Trace = %v, want %v", l.e.Trace, traceID)
+			if parent.e.Trace != traceID {
+				t.Errorf("Trace = %v, want %v", parent.e.Trace, traceID)
 			}
 
 			wantPayload := map[string]any{
@@ -369,14 +492,12 @@ func Test_gcpHandler_ServeHTTP(t *testing.T) {
 				"test_key_1": "test_value_1",
 				"test_key_2": "test_value_2",
 			}
-			if pl, ok := l.e.Payload.(map[string]any); ok {
-				if diff := cmp.Diff(pl, wantPayload); diff != "" {
-					t.Errorf("Payload mismatch (-want +got):\n%s", diff)
-				}
+			if diff := cmp.Diff(parent.e.Payload, wantPayload); diff != "" {
+				t.Errorf("Payload mismatch (-want +got):\n%s", diff)
 			}
 
-			if l.e.HTTPRequest.Status != tt.args.status {
-				t.Errorf("Status = %v, want %v", l.e.HTTPRequest.Status, tt.args.status)
+			if parent.e.HTTPRequest.Status != tt.args.status {
+				t.Errorf("Status = %v, want %v", parent.e.HTTPRequest.Status, tt.args.status)
 			}
 		})
 	}
@@ -491,6 +612,7 @@ func Test_newGCPLogger(t *testing.T) {
 	type args struct {
 		lg      *logging.Logger
 		traceID string
+		policy  Policy
 	}
 	tests := []struct {
 		name string
@@ -502,21 +624,22 @@ func Test_newGCPLogger(t *testing.T) {
 			args: args{
 				lg:      &logging.Logger{},
 				traceID: "hello",
+				policy:  OnEvent(),
 			},
 			want: &gcpLogger{
-				logger:        &logging.Logger{},
-				traceID:       "hello",
-				rsvdKeys:      []string{"message"},
-				reqAttributes: map[string]any{},
-				attributes:    map[string]any{},
+				record:     record{policy: OnEvent(), reqAttributes: map[string]any{}},
+				logger:     &logging.Logger{},
+				traceID:    "hello",
+				rsvdKeys:   []string{"message"},
+				attributes: map[string]any{},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := newGCPLogger(tt.args.lg, tt.args.traceID)
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(gcpLogger{}), cmpopts.IgnoreFields(gcpLogger{}, "logger", "mu", "root")); diff != "" {
+			got := newGCPLogger(tt.args.lg, tt.args.traceID, tt.args.policy)
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(gcpLogger{}, record{}, Policy{}), cmpopts.IgnoreFields(gcpLogger{}, "logger", "record.mu", "root")); diff != "" {
 				t.Errorf("newGCPLogger() mismatch (-want +got):\n%s", diff)
 			}
 			if got.root != got {
@@ -685,7 +808,7 @@ func Test_gcpLogger_AddRequestAttribute(t *testing.T) {
 			name: "prefix reserved key",
 			fields: fields{
 				root: &gcpLogger{
-					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+					record: record{reqAttributes: map[string]any{"test_key_2": "test_value_2"}},
 				},
 				rsvdKeys: []string{"test_key 1", "test_key"},
 			},
@@ -699,7 +822,7 @@ func Test_gcpLogger_AddRequestAttribute(t *testing.T) {
 			name: "add request attribute (non-reserved key)",
 			fields: fields{
 				root: &gcpLogger{
-					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+					record: record{reqAttributes: map[string]any{"test_key_2": "test_value_2"}},
 				},
 				rsvdKeys: []string{"test_key 1"},
 			},
@@ -713,7 +836,7 @@ func Test_gcpLogger_AddRequestAttribute(t *testing.T) {
 			name: "overwrite request attribute value",
 			fields: fields{
 				root: &gcpLogger{
-					reqAttributes: map[string]any{"test_key_2": "test_value_2"},
+					record: record{reqAttributes: map[string]any{"test_key_2": "test_value_2"}},
 				},
 				rsvdKeys: []string{"test_key 1"},
 			},
@@ -876,13 +999,15 @@ func Test_gcpAttributer_Logger(t *testing.T) {
 					root: &gcpLogger{
 						traceID: "root trace id",
 					},
-					logger:        &testLogger{},
-					traceID:       "1234567890",
-					rsvdKeys:      []string{"test reserved key 1", "test reserved key 2"},
-					attributes:    map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
-					maxSeverity:   logging.Warning,
-					logCount:      2,
-					reqAttributes: map[string]any{"test_req_key_1": "test_req_value_1", "test_req_key_2": "test_req_value_2"},
+					logger:     &testLogger{},
+					traceID:    "1234567890",
+					rsvdKeys:   []string{"test reserved key 1", "test reserved key 2"},
+					attributes: map[string]any{"test_key_1": "test_value_1", "test_key_2": "test_value_2"},
+					record: record{
+						maxSeverity:   logging.Warning,
+						logCount:      2,
+						reqAttributes: map[string]any{"test_req_key_1": "test_req_value_1", "test_req_key_2": "test_req_value_2"},
+					},
 				},
 				attributes: map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
 			},
@@ -890,12 +1015,9 @@ func Test_gcpAttributer_Logger(t *testing.T) {
 				root: &gcpLogger{
 					traceID: "root trace id",
 				},
-				traceID:       "1234567890",
-				rsvdKeys:      []string{"test reserved key 1", "test reserved key 2"},
-				attributes:    map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
-				maxSeverity:   logging.Default,
-				logCount:      0,
-				reqAttributes: nil,
+				traceID:    "1234567890",
+				rsvdKeys:   []string{"test reserved key 1", "test reserved key 2"},
+				attributes: map[string]any{"test_key_3": "test_value_3", "test_key_4": "test_value_4"},
 			},
 		},
 	}
@@ -908,7 +1030,7 @@ func Test_gcpAttributer_Logger(t *testing.T) {
 			}
 
 			got := a.Logger()
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(gcpLogger{}), cmpopts.IgnoreFields(gcpLogger{}, "mu", "logger")); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(gcpLogger{}, record{}, Policy{}), cmpopts.IgnoreFields(gcpLogger{}, "record.mu", "logger")); diff != "" {
 				t.Errorf("gcpAttributer.Logger() mismatch (-want +got):\n%s", diff)
 			}
 			gotGcpLogger, ok := got.(*gcpLogger)
@@ -955,9 +1077,11 @@ func (t *testLogger) Log(e logging.Entry) {
 }
 
 type captureLogger struct {
-	e logging.Entry
+	e     logging.Entry
+	calls int
 }
 
 func (c *captureLogger) Log(e logging.Entry) {
+	c.calls++
 	c.e = e
 }

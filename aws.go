@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"os"
 	"slices"
-	"sync"
 	"time"
 
+	"cloud.google.com/go/logging"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -30,14 +30,16 @@ const (
 
 // AWSExporter is an Exporter that logs to stdout in JSON format to be sent to cloudwatch
 type AWSExporter struct {
-	// logAll controls if this logger will log all requests, or only requests that have child logs
-	logAll bool
+	// policy is the exporter's default: Always, or OnEvent when built with logAll false
+	policy Policy
 }
 
-// NewAWSExporter returns a new AWSExporter
+// NewAWSExporter returns a new AWSExporter. logAll names its default policy: true is Always, and false is
+// OnEvent, which writes a request only when a line attached to it or it failed. A DefaultPolicy option on the
+// request logger overrides this default.
 func NewAWSExporter(logAll bool) *AWSExporter {
 	return &AWSExporter{
-		logAll: logAll,
+		policy: logAllPolicy(logAll),
 	}
 }
 
@@ -47,68 +49,25 @@ func (e *AWSExporter) Middleware() func(http.Handler) http.Handler {
 		return &awsHandler{
 			next:   next,
 			logger: slog.New(slog.NewJSONHandler(os.Stdout, nil)),
-			logAll: e.logAll,
+			policy: e.policy,
 		}
 	}
 }
 
 // CliRunner returns a function that executes the given function and creates a top-level parent log.
 func (e *AWSExporter) CliRunner() func(context.Context, string, func(context.Context) error) error {
-	return func(ctx context.Context, command string, f func(context.Context) error) error {
-		begin := time.Now()
-		var traceID string
-		if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
-			traceID = sc.TraceID().String()
-		} else {
-			traceID = generateID()
-		}
-
-		logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-		l := newAWSLogger(logger, traceID)
-		ctx = newContext(ctx, l)
-
-		err := f(ctx)
-
-		l.mu.Lock()
-		logCount := l.logCount
-		maxLevel := l.maxLevel
-		attributes := l.reqAttributes
-		l.mu.Unlock()
-
-		if !e.logAll && logCount == 0 {
-			return err
-		}
-
-		sc := trace.SpanFromContext(ctx).SpanContext()
-
-		logAttr := []slog.Attr{
-			slog.Any(awsTraceIDKey, traceID),
-			slog.Any(awsSpanIDKey, sc.SpanID().String()),
-			slog.String(awsHTTPElapsedKey, time.Since(begin).String()),
-			slog.String(awsHTTPMethodKey, "CLI"),
-			slog.String(awsHTTPURLKey, fmt.Sprintf("[%s] %s", time.Since(begin), command)),
-		}
-		for k, v := range attributes {
-			logAttr = append(logAttr, slog.Any(k, v))
-		}
-
-		logger.LogAttrs(ctx, maxLevel, parentLogEntry, logAttr...)
-
-		return err
+	r := &awsRunner{
+		logger: slog.New(slog.NewJSONHandler(os.Stdout, nil)),
+		policy: e.policy,
 	}
+
+	return r.run
 }
 
 // DaemonContext returns a context with a logger that writes directly to stdout, unbuffered.
 func (e *AWSExporter) DaemonContext(ctx context.Context) context.Context {
-	var traceID string
-	if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
-		traceID = sc.TraceID().String()
-	} else {
-		traceID = generateID()
-	}
-
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	l := newAWSLogger(logger, traceID)
+	l := newAWSLogger(logger, awsTraceIDFromContext(ctx), e.policy)
 
 	return newContext(ctx, l)
 }
@@ -116,7 +75,7 @@ func (e *AWSExporter) DaemonContext(ctx context.Context) context.Context {
 type awsHandler struct {
 	next   http.Handler
 	logger awslog
-	logAll bool
+	policy Policy
 }
 
 // ServeHTTP implements http.Handler
@@ -125,24 +84,20 @@ type awsHandler struct {
 func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	begin := time.Now()
 	xrayTraceID := awsTraceIDFromRequest(r, generateID)
-	l := newAWSLogger(h.logger, xrayTraceID)
+	l := newAWSLogger(h.logger, xrayTraceID, h.policy)
 	r = r.WithContext(newContext(r.Context(), l))
 	sw := newResponseRecorder(w)
 
 	h.next.ServeHTTP(sw, r)
 
-	l.mu.Lock()
-	logCount := l.logCount
-	maxLevel := l.maxLevel
-	attributes := l.reqAttributes
-	l.mu.Unlock()
-
-	if !h.logAll && logCount == 0 {
+	d := l.decide(sw.Status() >= http.StatusBadRequest)
+	if !d.write {
 		return
 	}
 
-	if sw.Status() > 499 && maxLevel < slog.LevelError {
-		maxLevel = slog.LevelError
+	maxSeverity := d.maxSeverity
+	if sw.Status() > 499 && maxSeverity < logging.Error {
+		maxSeverity = logging.Error
 	}
 
 	sc := trace.SpanFromContext(r.Context()).SpanContext()
@@ -153,30 +108,70 @@ func (h *awsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.String(awsHTTPElapsedKey, time.Since(begin).String()),
 	}
 	logAttr = append(logAttr, httpAttributes(r, sw)...)
-	for k, v := range attributes {
+	for k, v := range d.attributes {
 		logAttr = append(logAttr, slog.Any(k, v))
 	}
 
-	h.logger.LogAttrs(r.Context(), maxLevel, parentLogEntry, logAttr...)
+	h.logger.LogAttrs(r.Context(), slogLevel(maxSeverity), parentLogEntry, logAttr...)
+}
+
+// awsRunner runs a command-line function under a parent log entry.
+type awsRunner struct {
+	logger awslog
+	policy Policy
+}
+
+func (a *awsRunner) run(ctx context.Context, command string, f func(context.Context) error) error {
+	begin := time.Now()
+	traceID := awsTraceIDFromContext(ctx)
+	l := newAWSLogger(a.logger, traceID, a.policy)
+	ctx = newContext(ctx, l)
+
+	err := f(ctx)
+
+	d := l.decide(err != nil)
+	if !d.write {
+		return err
+	}
+
+	sc := trace.SpanFromContext(ctx).SpanContext()
+
+	logAttr := []slog.Attr{
+		slog.Any(awsTraceIDKey, traceID),
+		slog.Any(awsSpanIDKey, sc.SpanID().String()),
+		slog.String(awsHTTPElapsedKey, time.Since(begin).String()),
+		slog.String(awsHTTPMethodKey, "CLI"),
+		slog.String(awsHTTPURLKey, fmt.Sprintf("[%s] %s", time.Since(begin), command)),
+	}
+	for k, v := range d.attributes {
+		logAttr = append(logAttr, slog.Any(k, v))
+	}
+
+	a.logger.LogAttrs(ctx, slogLevel(d.maxSeverity), parentLogEntry, logAttr...)
+
+	return err
+}
+
+// awslog is the slog surface the AWS exporter writes through; it exists for testability
+type awslog interface {
+	LogAttrs(ctx context.Context, level slog.Level, msg string, attrs ...slog.Attr)
 }
 
 var _ ctxLogger = (*awsLogger)(nil)
 
 type awsLogger struct {
-	root          *awsLogger
-	logger        awslog
-	traceID       string
-	rsvdKeys      []string
-	rsvdReqKeys   []string
-	attributes    map[string]any // attributes for child (trace) logs
-	mu            sync.Mutex
-	maxLevel      slog.Level
-	logCount      int
-	reqAttributes map[string]any // attributes for the parent request log
+	record
+	root        *awsLogger
+	logger      awslog
+	traceID     string
+	rsvdKeys    []string
+	rsvdReqKeys []string
+	attributes  map[string]any // attributes for child (trace) logs
 }
 
-func newAWSLogger(logger awslog, traceID string) *awsLogger {
+func newAWSLogger(logger awslog, traceID string, policy Policy) *awsLogger {
 	l := &awsLogger{
+		record:   record{policy: policy, maxSeverity: logging.Info, reqAttributes: make(map[string]any)},
 		logger:   logger,
 		traceID:  traceID,
 		rsvdKeys: []string{awsTraceIDKey, awsSpanIDKey},
@@ -184,69 +179,63 @@ func newAWSLogger(logger awslog, traceID string) *awsLogger {
 			awsTraceIDKey, awsSpanIDKey,
 			awsHTTPElapsedKey, awsHTTPMethodKey, awsHTTPURLKey, awsHTTPStatusCodeKey, awsHTTPRespLengthKey, awsHTTPUserAgentKey, awsHTTPRemoteIPKey, awsHTTPSchemeKey, awsHTTPProtoKey,
 		},
-		reqAttributes: make(map[string]any),
-		attributes:    make(map[string]any),
+		attributes: make(map[string]any),
 	}
 	l.root = l // root is self
 
 	return l
 }
 
-type awslog interface {
-	LogAttrs(ctx context.Context, level slog.Level, msg string, attrs ...slog.Attr)
-}
-
-// newChild returns a new child awsLogger
+// newChild returns a new child awsLogger. The record is only used in the root logger, never the child.
 func (l *awsLogger) newChild() *awsLogger {
 	return &awsLogger{
-		root:          l.root,
-		logger:        l.logger,
-		traceID:       l.traceID,
-		rsvdKeys:      l.rsvdKeys,
-		rsvdReqKeys:   l.rsvdReqKeys,
-		attributes:    make(map[string]any),
-		reqAttributes: nil, // reqAttributes is only used in the root logger, never the child.
+		root:        l.root,
+		logger:      l.logger,
+		traceID:     l.traceID,
+		rsvdKeys:    l.rsvdKeys,
+		rsvdReqKeys: l.rsvdReqKeys,
+		attributes:  make(map[string]any),
 	}
 }
 
 // Debug logs a debug message.
 func (l *awsLogger) Debug(ctx context.Context, v any) {
-	l.log(ctx, slog.LevelDebug, fmt.Sprint(v))
+	l.log(ctx, logging.Debug, fmt.Sprint(v))
 }
 
 // Debugf logs a debug message with format.
 func (l *awsLogger) Debugf(ctx context.Context, format string, v ...any) {
-	l.log(ctx, slog.LevelDebug, fmt.Sprintf(format, v...))
+	l.log(ctx, logging.Debug, fmt.Sprintf(format, v...))
 }
 
 // Info logs a info message.
 func (l *awsLogger) Info(ctx context.Context, v any) {
-	l.log(ctx, slog.LevelInfo, fmt.Sprint(v))
+	l.log(ctx, logging.Info, fmt.Sprint(v))
 }
 
 // Infof logs a info message with format.
 func (l *awsLogger) Infof(ctx context.Context, format string, v ...any) {
-	l.log(ctx, slog.LevelInfo, fmt.Sprintf(format, v...))
+	l.log(ctx, logging.Info, fmt.Sprintf(format, v...))
 }
 
 // Warn logs a warning message.
 func (l *awsLogger) Warn(ctx context.Context, v any) {
-	l.log(ctx, slog.LevelWarn, fmt.Sprint(v))
+	l.log(ctx, logging.Warning, fmt.Sprint(v))
 }
 
 // Warnf logs a warning message with format.
 func (l *awsLogger) Warnf(ctx context.Context, format string, v ...any) {
-	l.log(ctx, slog.LevelWarn, fmt.Sprintf(format, v...))
+	l.log(ctx, logging.Warning, fmt.Sprintf(format, v...))
 }
 
 // Error logs an error message.
 func (l *awsLogger) Error(ctx context.Context, v any) {
-	l.log(ctx, slog.LevelError, fmt.Sprint(v))
+	l.log(ctx, logging.Error, fmt.Sprint(v))
 }
 
 // Errorf logs an error message with format.
 func (l *awsLogger) Errorf(ctx context.Context, format string, v ...any) {
-	l.log(ctx, slog.LevelError, fmt.Sprintf(format, v...))
+	l.log(ctx, logging.Error, fmt.Sprintf(format, v...))
 }
 
 // AddRequestAttribute adds an attribute (key, value) for the parent request log
@@ -257,9 +246,12 @@ func (l *awsLogger) AddRequestAttribute(key string, value any) {
 		key = customPrefix + key
 	}
 
-	l.root.mu.Lock()
-	defer l.root.mu.Unlock()
-	l.root.reqAttributes[key] = value
+	l.root.addRequestAttribute(key, value)
+}
+
+// SetPolicy replaces the policy of the request or run this logger belongs to.
+func (l *awsLogger) SetPolicy(p Policy) {
+	l.root.setPolicy(p)
 }
 
 // WithAttributes returns an attributer that can be used to add child (trace) log attributes
@@ -275,13 +267,10 @@ func (l *awsLogger) TraceID() string {
 	return l.traceID
 }
 
-func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
-	l.root.mu.Lock()
-	if l.root.maxLevel < level {
-		l.root.maxLevel = level
+func (l *awsLogger) log(ctx context.Context, severity logging.Severity, message string) {
+	if !l.root.attach(severity) {
+		return
 	}
-	l.root.logCount++
-	l.root.mu.Unlock()
 
 	span := trace.SpanFromContext(ctx)
 	attr := make([]slog.Attr, 0, 2+len(l.attributes))
@@ -292,7 +281,7 @@ func (l *awsLogger) log(ctx context.Context, level slog.Level, message string) {
 	for k, v := range l.attributes {
 		attr = append(attr, slog.Any(k, v))
 	}
-	l.logger.LogAttrs(ctx, level, message, attr...)
+	l.logger.LogAttrs(ctx, slogLevel(severity), message, attr...)
 }
 
 var _ attributer = (*awsAttributer)(nil)
@@ -346,4 +335,29 @@ func awsTraceIDFromRequest(r *http.Request, idgen func() string) string {
 	}
 
 	return traceID
+}
+
+// awsTraceIDFromContext returns the trace id of the span in the context, or a generated one when the context
+// carries no valid span.
+func awsTraceIDFromContext(ctx context.Context) string {
+	if sc := trace.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
+		return sc.TraceID().String()
+	}
+
+	return generateID()
+}
+
+// slogLevel is the level the AWS exporter writes a severity at: the four severities this package logs at map
+// one to one, and anything lower than Info is Debug.
+func slogLevel(severity logging.Severity) slog.Level {
+	switch {
+	case severity >= logging.Error:
+		return slog.LevelError
+	case severity >= logging.Warning:
+		return slog.LevelWarn
+	case severity >= logging.Info:
+		return slog.LevelInfo
+	default:
+		return slog.LevelDebug
+	}
 }
