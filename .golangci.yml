@@ -159,7 +159,7 @@ linters:
           - paralleltest
           - tparallel
         path: console_test\.go
-        text: Test_consoleLogger
+        text: Test_consoleLogger|Test_consoleHandler_ServeHTTP
       - linters:
           - paralleltest
           - tparallel
@@ -175,11 +175,6 @@ linters:
           - tparallel
         path: handler_test\.go
         text: TestNewCliLogger
-      - linters:
-          - paralleltest
-          - tparallel
-        path: aws_test\.go
-        text: TestAWSExporter_CliRunner
       - linters:
           - paralleltest
           - tparallel

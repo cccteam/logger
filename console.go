@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"cloud.google.com/go/logging"
@@ -34,7 +33,8 @@ type ConsoleExporter struct {
 	noColor bool
 }
 
-// NewConsoleExporter returns a configured ConsoleExporter
+// NewConsoleExporter returns a configured ConsoleExporter. Its default policy is Always; a DefaultPolicy option
+// on the request logger sets another, so a local run shows the same decisions as the cloud.
 func NewConsoleExporter() *ConsoleExporter {
 	return &ConsoleExporter{}
 }
@@ -66,19 +66,18 @@ func (e *ConsoleExporter) CliRunner() func(context.Context, string, func(context
 
 		err := f(ctx)
 
-		l.mu.Lock()
-		logCount := l.logCount
-		maxSeverity := l.maxSeverity
-		attributes := l.reqAttributes
-		l.mu.Unlock()
+		d := l.decide(err != nil)
+		if !d.write {
+			return err
+		}
 
 		var msg strings.Builder
-		fmt.Fprintf(&msg, "CLI [%s] %s %s=%d", time.Since(begin), command, cslLogCount, logCount)
-		for k, v := range attributes {
+		fmt.Fprintf(&msg, "CLI [%s] %s %s=%d", time.Since(begin), command, cslLogCount, d.logCount)
+		for k, v := range d.attributes {
 			fmt.Fprintf(&msg, " %s=%v", k, v)
 		}
 
-		l.console(maxSeverity, severityColor(maxSeverity), msg.String())
+		l.write(d.maxSeverity, severityColor(d.maxSeverity), msg.String())
 
 		return err
 	}
@@ -104,64 +103,59 @@ func (c *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	c.next.ServeHTTP(sw, r)
 
-	l.mu.Lock()
-	logCount := l.logCount
-	maxSeverity := l.maxSeverity
-	attributes := l.reqAttributes
-	l.mu.Unlock()
+	d := l.decide(sw.Status() >= http.StatusBadRequest)
+	if !d.write {
+		return
+	}
 
 	// status code should also set the minimum maxSeverity to Error
+	maxSeverity := d.maxSeverity
 	if sw.Status() > 499 && maxSeverity < logging.Error {
 		maxSeverity = logging.Error
 	}
 
 	var msg strings.Builder
 	fmt.Fprintf(&msg, "%s %s %d %s %s=%d %s=%d %s=%d", r.Method, r.URL.Path, sw.Status(), time.Since(begin),
-		cslReqSize, requestSize(r.Header.Get("Content-Length")), cslRespSize, sw.Length(), cslLogCount, logCount)
-	for k, v := range attributes {
+		cslReqSize, requestSize(r.Header.Get("Content-Length")), cslRespSize, sw.Length(), cslLogCount, d.logCount)
+	for k, v := range d.attributes {
 		fmt.Fprintf(&msg, " %s=%v", k, v)
 	}
-	l.console(maxSeverity, severityColor(maxSeverity), msg.String())
+	l.write(maxSeverity, severityColor(maxSeverity), msg.String())
 }
 
 var _ ctxLogger = (*consoleLogger)(nil)
 
 type consoleLogger struct {
-	root          *consoleLogger
-	r             *http.Request
-	noColor       bool
-	rsvdReqKeys   []string
-	attributes    map[string]any // attributes for child (trace) logs
-	mu            sync.Mutex
-	maxSeverity   logging.Severity
-	logCount      int
-	reqAttributes map[string]any // attributes for the parent request log
+	record
+	root        *consoleLogger
+	r           *http.Request
+	noColor     bool
+	rsvdReqKeys []string
+	attributes  map[string]any // attributes for child (trace) logs
 }
 
 // newConsoleLogger logs all output to console
 func newConsoleLogger(r *http.Request, noColor bool) *consoleLogger {
 	l := &consoleLogger{
-		r: r, noColor: noColor,
-		rsvdReqKeys:   []string{cslReqSize, cslRespSize, cslLogCount},
-		maxSeverity:   logging.Info,
-		reqAttributes: make(map[string]any),
-		attributes:    make(map[string]any),
+		record:      record{policy: Always(), maxSeverity: logging.Info, reqAttributes: make(map[string]any)},
+		r:           r,
+		noColor:     noColor,
+		rsvdReqKeys: []string{cslReqSize, cslRespSize, cslLogCount},
+		attributes:  make(map[string]any),
 	}
 	l.root = l // root is self
 
 	return l
 }
 
-// newChild returns a new child consoleLogger
+// newChild returns a new child consoleLogger. The record is only used in the root logger, never the child.
 func (l *consoleLogger) newChild() *consoleLogger {
 	return &consoleLogger{
-		root:          l.root,
-		r:             l.r,
-		noColor:       l.noColor,
-		rsvdReqKeys:   l.rsvdReqKeys,
-		maxSeverity:   logging.Debug,
-		attributes:    make(map[string]any),
-		reqAttributes: nil, // reqAttributes is only used in the root logger, never the child.
+		root:        l.root,
+		r:           l.r,
+		noColor:     l.noColor,
+		rsvdReqKeys: l.rsvdReqKeys,
+		attributes:  make(map[string]any),
 	}
 }
 
@@ -213,9 +207,12 @@ func (l *consoleLogger) AddRequestAttribute(key string, value any) {
 		key = customPrefix + key
 	}
 
-	l.root.mu.Lock()
-	defer l.root.mu.Unlock()
-	l.root.reqAttributes[key] = value
+	l.root.addRequestAttribute(key, value)
+}
+
+// SetPolicy replaces the policy of the request or run this logger belongs to.
+func (l *consoleLogger) SetPolicy(p Policy) {
+	l.root.setPolicy(p)
 }
 
 // WithAttributes returns an attributer that can be used to add child (trace) log attributes
@@ -231,7 +228,18 @@ func (l *consoleLogger) TraceID() string {
 	return ""
 }
 
+// console attaches a line to the request, unless the policy's floor drops it, and prints it.
 func (l *consoleLogger) console(level logging.Severity, c color, msg string) {
+	if !l.root.attach(level) {
+		return
+	}
+
+	l.write(level, c, msg)
+}
+
+// write prints one line at the level, with the child attributes appended. The parent entry comes through here
+// directly, so it is never counted as a line of its own.
+func (l *consoleLogger) write(level logging.Severity, c color, msg string) {
 	for k, v := range l.attributes {
 		msg += fmt.Sprintf(", %s=%v", k, v)
 	}
@@ -240,13 +248,6 @@ func (l *consoleLogger) console(level logging.Severity, c color, msg string) {
 }
 
 func (l *consoleLogger) colorPrint(level logging.Severity, c color) string {
-	l.root.mu.Lock()
-	if l.root.maxSeverity < level {
-		l.root.maxSeverity = level
-	}
-	l.root.logCount++
-	l.root.mu.Unlock()
-
 	strLevel := strings.ToUpper(level.String())
 	if level == logging.Warning {
 		strLevel = strLevel[:4]

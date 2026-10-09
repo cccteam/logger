@@ -120,6 +120,13 @@ func (l *Logger) AddRequestAttribute(key string, value any) *Logger {
 	return l
 }
 
+// SetPolicy replaces the Policy of the request or run this logger belongs to: a handler promotes or demotes its
+// own request. The nearest declaration wins, so this call counts over the request logger's options and over any
+// WithPolicy on the way down. Without a request logger behind the context it does nothing.
+func (l *Logger) SetPolicy(p Policy) {
+	l.lg.SetPolicy(p)
+}
+
 // WithAttributes returns an AttributerLogger that can be used to add child (trace) log attributes
 func (l *Logger) WithAttributes() *AttributerLogger {
 	return &AttributerLogger{

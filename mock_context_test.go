@@ -139,6 +139,18 @@ func (mr *MockctxLoggerMockRecorder) Infof(ctx, format any, v ...any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Infof", reflect.TypeOf((*MockctxLogger)(nil).Infof), varargs...)
 }
 
+// SetPolicy mocks base method.
+func (m *MockctxLogger) SetPolicy(p Policy) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetPolicy", p)
+}
+
+// SetPolicy indicates an expected call of SetPolicy.
+func (mr *MockctxLoggerMockRecorder) SetPolicy(p any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPolicy", reflect.TypeOf((*MockctxLogger)(nil).SetPolicy), p)
+}
+
 // TraceID mocks base method.
 func (m *MockctxLogger) TraceID() string {
 	m.ctrl.T.Helper()
