@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.30](https://github.com/cccteam/logger/compare/v0.1.29...v0.1.30) (2026-10-09)
+
+
+### Features
+
+* request log policies with a severity floor, options on the request logger, and a switchable exporter ([f4d062a](https://github.com/cccteam/logger/commit/f4d062a839213a4d01c82d9d228d5a9569c6c13c))
+
 ## [0.1.29](https://github.com/cccteam/logger/compare/v0.1.28...v0.1.29) (2026-10-08)
 
 
