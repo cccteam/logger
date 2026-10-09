@@ -2,6 +2,9 @@ package logger
 
 import (
 	"maps"
+	// math/rand/v2 draws the per-request sample of a sampled policy: a statistical
+	// choice, not a secret, so the scan's crypto/rand advice does not apply here.
+	// nosemgrep: go.lang.security.audit.crypto.math_random.math-random-used
 	"math/rand/v2"
 	"sync"
 
