@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.31](https://github.com/cccteam/logger/compare/v0.1.30...v0.1.31) (2026-10-22)
+
+
+### Code Upgrade
+
+* **deps:** Go 1.27.3; crypto/x509 GO-2026-6809 fixed ([#154](https://github.com/cccteam/logger/issues/154)) ([099e721](https://github.com/cccteam/logger/commit/099e7218ccbce90874c4da91d63acdbb1b819b83))
+
 ## [0.1.30](https://github.com/cccteam/logger/compare/v0.1.29...v0.1.30) (2026-10-09)
 
 
