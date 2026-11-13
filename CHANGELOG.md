@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.32](https://github.com/cccteam/logger/compare/v0.1.31...v0.1.32) (2026-11-13)
+
+
+### Bug Fixes
+
+* **deps:** bump Go to 1.27.4 to fix GO-2026-6859 (net/http) ([#159](https://github.com/cccteam/logger/issues/159)) ([abeb45c](https://github.com/cccteam/logger/commit/abeb45c35475acf321817130ba423c73fb36e068))
+
+
+### Code Upgrade
+
+* **deps:** bump the github-actions group across 1 directory with 4 updates ([#161](https://github.com/cccteam/logger/issues/161)) ([f7c76cd](https://github.com/cccteam/logger/commit/f7c76cddbe1e9095434ef35e278c2bbe62141d3b))
+* **deps:** bump the go-dependencies group across 1 directory with 2 updates ([#158](https://github.com/cccteam/logger/issues/158)) ([3e0dbc2](https://github.com/cccteam/logger/commit/3e0dbc279dd0bdb5f694a8feb9d5dbbdebb5a562))
+
 ## [0.1.31](https://github.com/cccteam/logger/compare/v0.1.30...v0.1.31) (2026-10-22)
 
 
